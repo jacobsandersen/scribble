@@ -42,6 +42,16 @@ func validateServerSection() {
 	if port == 0 {
 		log.Fatal("server.port: invalid value, should be a positive whole number (a valid network port)")
 	}
+
+	maxBytesFormUrlEncoded := viper.GetUint("server.limits.maxBytesFormUrlEncoded")
+	if maxBytesFormUrlEncoded == 0 {
+		log.Fatal("server.limits.maxBytesFormUrlEncoded: invalid value, should be defined as positive bytes value")
+	}
+
+	maxBytesMultipart := viper.GetUint("server.limits.maxBytesMultipart")
+	if maxBytesMultipart == 0 {
+		log.Fatal("server.limits.maxBytesMultipartt: invalid value, should be defined as positive bytes value")
+	}
 }
 
 func validateMicropubSection() {
@@ -107,6 +117,14 @@ func validatePersistenceStaticGitSection() {
 
 func BindAddress() string {
 	return fmt.Sprintf("%v%v", viper.GetString("server.address"), viper.GetUint("server.port"))
+}
+
+func MaxBytesFormUrlEncoded() uint {
+	return viper.GetUint("server.limits.maxBytesFormUrlEncoded")
+}
+
+func MaxBytesMultipart() uint {
+	return viper.GetUint("server.limits.maxBytesMultipart")
 }
 
 func TokenEndpoint() string {
