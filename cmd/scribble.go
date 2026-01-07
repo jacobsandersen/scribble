@@ -23,7 +23,7 @@ func main() {
 	}
 
 	log.Println("loading configuration...")
-	config.LoadConfiguration(*configFile)
+	config.LoadAndValidateConfiguration(*configFile)
 
 	log.Println("starting http server...")
 	server.StartServer()
