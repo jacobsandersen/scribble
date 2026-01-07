@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/micropub/resp"
-	"github.com/indieinfra/scribble/micropub/scope"
 	"github.com/indieinfra/scribble/micropub/server/util"
 )
 
@@ -49,7 +47,8 @@ func extractTokenFromFormBody(w http.ResponseWriter, r *http.Request) string {
 		return ""
 	}
 
-	return values.Get("access_token")
+	// micropub declares the parameter "auth_token" when providing the token in this manner
+	return values.Get("auth_token")
 }
 
 // function ValidateTokenMiddleware wraps a downstream handler. At execution time,
@@ -65,7 +64,9 @@ func ValidateTokenMiddleware(next http.Handler) http.Handler {
 		}
 
 		token := extractBearerHeader(r.Header.Get("Authorization"))
-		if token == "" && method != http.MethodGet && contentType == "application/x-www-form-urlencoded" {
+		if token == "" && method == http.MethodPost && contentType == "application/x-www-form-urlencoded" {
+			// If token is not in header, method is post, and content type is x-www-form-urlencoded...
+			// We need to check the body, unfortunately
 			token = extractTokenFromFormBody(w, r)
 		}
 
@@ -77,7 +78,7 @@ func ValidateTokenMiddleware(next http.Handler) http.Handler {
 
 		details := VerifyAccessToken(token)
 		if details == nil {
-			resp.WriteHttpError(w, http.StatusUnauthorized, "Token validation failed. Please try again with a valid token.")
+			resp.WriteHttpError(w, http.StatusForbidden, "Token validation failed. Please try again with a valid token.")
 			return
 		}
 
@@ -85,34 +86,4 @@ func ValidateTokenMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// function RequireScopeMiddleware wraps a downstream handler. At execution time,
-// the middleware expects a valid token to be available in the request context.
-// The middleware will access the stored token details and validate the token
-// contains the required scopes. Without the required scopes, the middleware will
-// abort the request.
-func RequireScopeMiddleware(scopes []scope.Scope) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			details, ok := r.Context().Value(tokenKey).(*TokenDetails)
-			if !ok {
-				resp.WriteHttpError(w, http.StatusUnauthorized, "Request is missing token")
-				return
-			}
-
-			for _, scope := range scopes {
-				if !details.HasScope(scope) {
-					if config.Debug() {
-						log.Printf("debug: received a valid token, but failed scope check (want %v, have %q)", scope, details.Scope)
-					}
-
-					resp.WriteHttpError(w, http.StatusForbidden, "Insufficient scope for request.")
-					return
-				}
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
 }
