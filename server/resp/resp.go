@@ -23,27 +23,27 @@ func WriteCreated(w http.ResponseWriter, location string) {
 	writeResp(w, http.StatusCreated, nil)
 }
 
-func WriteHttpForbidden(w http.ResponseWriter, description string) {
-	writeHttpError(w, http.StatusForbidden, "forbidden", description)
+func WriteForbidden(w http.ResponseWriter, description string) {
+	writeError(w, http.StatusForbidden, "forbidden", description)
 }
 
-func WriteHttpInsufficientScope(w http.ResponseWriter, description string) {
-	writeHttpError(w, http.StatusForbidden, "insufficient_scope", description)
+func WriteInsufficientScope(w http.ResponseWriter, description string) {
+	writeError(w, http.StatusForbidden, "insufficient_scope", description)
 }
 
 func WriteUnauthorized(w http.ResponseWriter, description string) {
-	writeHttpError(w, http.StatusUnauthorized, "unauthorized", description)
+	writeError(w, http.StatusUnauthorized, "unauthorized", description)
 }
 
 func WriteInvalidRequest(w http.ResponseWriter, description string) {
-	writeHttpError(w, http.StatusBadRequest, "invalid_request", description)
+	writeError(w, http.StatusBadRequest, "invalid_request", description)
 }
 
 func WriteInternalServerError(w http.ResponseWriter, description string) {
-	writeHttpError(w, http.StatusInternalServerError, "internal_server_error", description)
+	writeError(w, http.StatusInternalServerError, "internal_server_error", description)
 }
 
-func writeHttpError(w http.ResponseWriter, status int, err string, description string) {
+func writeError(w http.ResponseWriter, status int, err string, description string) {
 	writeResp(w, status, ErrorResponse{
 		Error:       err,
 		Description: description,

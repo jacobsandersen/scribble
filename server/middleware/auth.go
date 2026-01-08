@@ -87,7 +87,7 @@ func ValidateTokenMiddleware(next http.Handler) http.Handler {
 
 		details := auth.VerifyAccessToken(token)
 		if details == nil {
-			resp.WriteHttpForbidden(w, "Token validation failed")
+			resp.WriteForbidden(w, "Token validation failed")
 			return
 		}
 
