@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -31,7 +32,8 @@ func extractBearerHeader(auth string) string {
 }
 
 func extractTokenFromFormBody(w http.ResponseWriter, r *http.Request) string {
-	r.Body = http.MaxBytesReader(w, r.Body, int64(config.MaxBytesFormUrlEncoded()))
+	// Read at most 32K of the body to extract access token
+	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -39,12 +41,18 @@ func extractTokenFromFormBody(w http.ResponseWriter, r *http.Request) string {
 		return ""
 	}
 
+	// Replace the body so handlers can read it again
 	r.Body = io.NopCloser(bytes.NewReader(body))
 
 	values, err := url.ParseQuery(string(body))
+
+	// Make a debug log if there was a parse error for clarity
+	// It is possible the payload is partially read, so an error makes sense
+	// We'll try to get an auth token anyway; the debug message nudges to prefer Auth header instead
 	if err != nil {
-		resp.WriteHttpError(w, http.StatusBadRequest, "Failed to read form body to get access token")
-		return ""
+		if config.Debug() {
+			log.Printf("debug: form body parse error during token extraction (consider using Auth header): %v", err)
+		}
 	}
 
 	// micropub declares the parameter "auth_token" when providing the token in this manner
