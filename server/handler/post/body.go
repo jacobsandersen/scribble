@@ -82,7 +82,7 @@ func ReadBody(w http.ResponseWriter, r *http.Request) *MicropubData {
 func readJsonBody(w http.ResponseWriter, r *http.Request, d *MicropubData) *MicropubData {
 	r.Body = http.MaxBytesReader(w, r.Body, int64(config.MaxPayloadSize()))
 	if err := json.NewDecoder(r.Body).Decode(&d.Properties); err != nil {
-		resp.WriteHttpError(w, http.StatusBadRequest, fmt.Errorf("Invalid JSON body: %w", err).Error())
+		resp.WriteInvalidRequest(w, "Invalid JSON body")
 		return nil
 	}
 
@@ -92,7 +92,7 @@ func readJsonBody(w http.ResponseWriter, r *http.Request, d *MicropubData) *Micr
 func readFormUrlEncodedBody(w http.ResponseWriter, r *http.Request, d *MicropubData) *MicropubData {
 	r.Body = http.MaxBytesReader(w, r.Body, int64(config.MaxPayloadSize()))
 	if err := r.ParseForm(); err != nil {
-		resp.WriteHttpError(w, http.StatusUnprocessableEntity, fmt.Errorf("Invalid form body: %w", err).Error())
+		resp.WriteInvalidRequest(w, fmt.Sprintf("Invalid form body: %v", err))
 		return nil
 	}
 

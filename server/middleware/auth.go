@@ -38,7 +38,7 @@ func extractTokenFromFormBody(w http.ResponseWriter, r *http.Request) string {
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		resp.WriteHttpError(w, http.StatusRequestEntityTooLarge, "Request body too large")
+		resp.WriteInvalidRequest(w, "Request too large")
 		return ""
 	}
 
@@ -81,13 +81,13 @@ func ValidateTokenMiddleware(next http.Handler) http.Handler {
 
 		token = strings.TrimSpace(token)
 		if token == "" {
-			resp.WriteHttpError(w, http.StatusUnauthorized, "An access token is required")
+			resp.WriteUnauthorized(w, "An access token is required")
 			return
 		}
 
 		details := auth.VerifyAccessToken(token)
 		if details == nil {
-			resp.WriteHttpError(w, http.StatusForbidden, "Token validation failed. Please try again with a valid token.")
+			resp.WriteHttpForbidden(w, "Token validation failed")
 			return
 		}
 

@@ -1,6 +1,7 @@
 package get
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/indieinfra/scribble/server/resp"
@@ -16,6 +17,6 @@ func DispatchGet(w http.ResponseWriter, r *http.Request) {
 	case "syndicate-to":
 		HandleSyndicateTo(w, r)
 	default:
-		resp.WriteHttpError(w, http.StatusBadRequest, "Unknown GET request")
+		resp.WriteInvalidRequest(w, fmt.Sprintf("Unknown query: %q", q))
 	}
 }

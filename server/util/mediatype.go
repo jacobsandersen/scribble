@@ -20,23 +20,13 @@ func RequireValidMediaContentType(w http.ResponseWriter, r *http.Request) (strin
 func ExtractMediaType(w http.ResponseWriter, r *http.Request) (string, bool) {
 	ct := r.Header.Get("Content-Type")
 	if ct == "" {
-		resp.WriteHttpError(
-			w,
-			http.StatusUnsupportedMediaType,
-			"Content-Type must be specified",
-		)
-
+		resp.WriteInvalidRequest(w, "missing Content-Type")
 		return "", false
 	}
 
 	mediaType, _, err := mime.ParseMediaType(ct)
 	if err != nil {
-		resp.WriteHttpError(
-			w,
-			http.StatusUnsupportedMediaType,
-			fmt.Errorf("Invalid Content-Type: %w", err).Error(),
-		)
-
+		resp.WriteInvalidRequest(w, fmt.Sprintf("Invalid Content-Type: %v", err))
 		return "", false
 	}
 
@@ -56,11 +46,7 @@ func requireValidContentType(w http.ResponseWriter, r *http.Request, valid []str
 	if slices.Contains(valid, mediaType) {
 		return r.Method, mediaType, true
 	} else {
-		resp.WriteHttpError(
-			w,
-			http.StatusUnsupportedMediaType,
-			fmt.Sprintf("Invalid-Content-Type: only %v allowed", valid),
-		)
+		resp.WriteInvalidRequest(w, fmt.Sprintf("Invalid Content-Type: only %v allowed", valid))
 		return r.Method, mediaType, false
 	}
 }

@@ -2,6 +2,6 @@ package post
 
 import "net/http"
 
-func Delete(w http.ResponseWriter, r *http.Request) {
+func Delete(w http.ResponseWriter, r *http.Request, b *MicropubData) {
 
 }
