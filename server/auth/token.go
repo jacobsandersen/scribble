@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/indieinfra/scribble/config"
-	"github.com/indieinfra/scribble/micropub/scope"
 )
 
 type TokenDetails struct {
@@ -24,7 +23,7 @@ func (details *TokenDetails) String() string {
 	return fmt.Sprintf("TokenDetails{me=%v, clientId=%v, scope=%v, issuedAt=%v, nonce=%v}", details.Me, details.ClientId, details.Scope, details.IssuedAt, details.Nonce)
 }
 
-func (details *TokenDetails) HasScope(scope scope.Scope) bool {
+func (details *TokenDetails) HasScope(scope Scope) bool {
 	return slices.Contains(strings.Split(strings.ToLower(details.Scope), " "), strings.ToLower(scope.String()))
 }
 

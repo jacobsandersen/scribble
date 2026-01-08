@@ -1,4 +1,4 @@
-package auth
+package middleware
 
 import (
 	"bytes"
@@ -10,8 +10,9 @@ import (
 	"strings"
 
 	"github.com/indieinfra/scribble/config"
-	"github.com/indieinfra/scribble/micropub/resp"
-	"github.com/indieinfra/scribble/micropub/server/util"
+	"github.com/indieinfra/scribble/server/auth"
+	"github.com/indieinfra/scribble/server/resp"
+	"github.com/indieinfra/scribble/server/util"
 )
 
 type tokenKeyType struct{}
@@ -66,13 +67,13 @@ func extractTokenFromFormBody(w http.ResponseWriter, r *http.Request) string {
 // http request to the defined token endpoint to validate the token.
 func ValidateTokenMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		method, contentType, ok := util.RequireValidContentType(w, r)
+		contentType, ok := util.ExtractMediaType(w, r)
 		if !ok {
 			return
 		}
 
 		token := extractBearerHeader(r.Header.Get("Authorization"))
-		if token == "" && method == http.MethodPost && contentType == "application/x-www-form-urlencoded" {
+		if token == "" && r.Method == http.MethodPost && contentType == "application/x-www-form-urlencoded" {
 			// If token is not in header, method is post, and content type is x-www-form-urlencoded...
 			// We need to check the body, unfortunately
 			token = extractTokenFromFormBody(w, r)
@@ -84,7 +85,7 @@ func ValidateTokenMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		details := VerifyAccessToken(token)
+		details := auth.VerifyAccessToken(token)
 		if details == nil {
 			resp.WriteHttpError(w, http.StatusForbidden, "Token validation failed. Please try again with a valid token.")
 			return

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/indieinfra/scribble/config"
-	"github.com/indieinfra/scribble/micropub/server"
+	"github.com/indieinfra/scribble/server"
 )
 
 func main() {

@@ -1,4 +1,4 @@
-package scope
+package auth
 
 type Scope int
 

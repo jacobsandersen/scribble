@@ -3,7 +3,7 @@ package get
 import (
 	"net/http"
 
-	"github.com/indieinfra/scribble/micropub/resp"
+	"github.com/indieinfra/scribble/server/resp"
 )
 
 func DispatchGet(w http.ResponseWriter, r *http.Request) {
