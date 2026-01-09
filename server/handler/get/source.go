@@ -7,5 +7,13 @@ import (
 )
 
 func HandleSource(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+
+	url := q.Get("url")
+	if url == "" {
+		resp.WriteInvalidRequest(w, "source requires a url")
+		return
+	}
+
 	resp.WriteNoContent(w)
 }
