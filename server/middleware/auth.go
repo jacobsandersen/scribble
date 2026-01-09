@@ -62,16 +62,21 @@ func extractTokenFromFormBody(w http.ResponseWriter, r *http.Request) string {
 // http request to the defined token endpoint to validate the token.
 func ValidateTokenMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		contentType, ok := util.ExtractMediaType(w, r)
-		if !ok {
-			return
-		}
+		var token string
+		if r.Method != http.MethodGet {
+			contentType, ok := util.ExtractMediaType(w, r)
+			if !ok {
+				return
+			}
 
-		token := extractBearerHeader(r.Header.Get("Authorization"))
-		if token == "" && r.Method == http.MethodPost && contentType == "application/x-www-form-urlencoded" {
-			// If token is not in header, method is post, and content type is x-www-form-urlencoded...
-			// We need to check the body, unfortunately
-			token = extractTokenFromFormBody(w, r)
+			token = extractBearerHeader(r.Header.Get("Authorization"))
+			if token == "" && r.Method == http.MethodPost && contentType == "application/x-www-form-urlencoded" {
+				// If token is not in header, method is post, and content type is x-www-form-urlencoded...
+				// We need to check the body, unfortunately
+				token = extractTokenFromFormBody(w, r)
+			}
+		} else {
+			token = extractBearerHeader(r.Header.Get("Authorization"))
 		}
 
 		token = strings.TrimSpace(token)

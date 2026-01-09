@@ -15,7 +15,7 @@ import (
 
 func StartServer() {
 	mux := http.NewServeMux()
-	mux.Handle("GET /", http.HandlerFunc(get.DispatchGet))
+	mux.Handle("GET /", middleware.ValidateTokenMiddleware(http.HandlerFunc(get.DispatchGet)))
 	mux.Handle("POST /", middleware.ValidateTokenMiddleware(http.HandlerFunc(post.DispatchPost)))
 	mux.Handle("POST /media", middleware.ValidateTokenMiddleware(http.HandlerFunc(upload.HandleMediaUpload)))
 
