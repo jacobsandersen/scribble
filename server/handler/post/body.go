@@ -2,7 +2,6 @@ package post
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -11,85 +10,37 @@ import (
 	"github.com/indieinfra/scribble/server/util"
 )
 
-type MicropubData struct {
-	Properties map[string]any
-}
-
-func (d *MicropubData) GetString(key string) (string, bool, error) {
-	val, ok := d.Properties[key]
-	if !ok {
-		return "", false, nil
-	}
-
-	switch v := val.(type) {
-	case string:
-		return v, true, nil
-	case []any:
-		if len(v) > 0 {
-			if s, ok := v[0].(string); ok {
-				return s, true, nil
-			}
-		}
-		return "", true, errors.New("value exists, but first element is not a string")
-	default:
-		return "", true, errors.New("value exists, but is not a string")
-	}
-}
-
-func (d *MicropubData) GetStringSlice(key string) ([]string, bool, error) {
-	val, ok := d.Properties[key]
-	if !ok {
-		return nil, false, nil
-	}
-
-	switch v := val.(type) {
-	case string:
-		return []string{v}, true, nil
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, x := range v {
-			s, ok := x.(string)
-			if !ok {
-				return nil, true, errors.New("value exists, but contains non-string elements")
-			}
-
-			out = append(out, s)
-		}
-		return out, true, nil
-	default:
-		return nil, true, errors.New("value exists, but cannot coerce to string slice")
-	}
-}
-
-func ReadBody(w http.ResponseWriter, r *http.Request) *MicropubData {
+func ReadBody(w http.ResponseWriter, r *http.Request) map[string]any {
 	_, contentType, ok := util.RequireValidMicropubContentType(w, r)
 	if !ok {
 		return nil
 	}
 
-	data := &MicropubData{Properties: make(map[string]any)}
-
 	switch contentType {
 	case "application/json":
-		return readJsonBody(w, r, data)
+		return readJsonBody(w, r)
 	case "application/x-www-form-urlencoded":
-		return readFormUrlEncodedBody(w, r, data)
+		return readFormUrlEncodedBody(w, r)
 	}
 
 	return nil
 }
 
-func readJsonBody(w http.ResponseWriter, r *http.Request, d *MicropubData) *MicropubData {
+func readJsonBody(w http.ResponseWriter, r *http.Request) map[string]any {
+	out := make(map[string]any)
+
 	r.Body = http.MaxBytesReader(w, r.Body, int64(config.MaxPayloadSize()))
-	if err := json.NewDecoder(r.Body).Decode(&d.Properties); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&out); err != nil {
 		resp.WriteInvalidRequest(w, "Invalid JSON body")
 		return nil
 	}
 
-	return d
+	return out
 }
 
-func readFormUrlEncodedBody(w http.ResponseWriter, r *http.Request, d *MicropubData) *MicropubData {
+func readFormUrlEncodedBody(w http.ResponseWriter, r *http.Request) map[string]any {
+	out := make(map[string]any)
+
 	r.Body = http.MaxBytesReader(w, r.Body, int64(config.MaxPayloadSize()))
 	if err := r.ParseForm(); err != nil {
 		resp.WriteInvalidRequest(w, fmt.Sprintf("Invalid form body: %v", err))
@@ -101,15 +52,15 @@ func readFormUrlEncodedBody(w http.ResponseWriter, r *http.Request, d *MicropubD
 		case 0:
 			continue
 		case 1:
-			d.Properties[key] = values[0]
+			out[key] = values[0]
 		default:
 			arr := make([]any, len(values))
 			for i, v := range values {
 				arr[i] = v
 			}
-			d.Properties[key] = arr
+			out[key] = arr
 		}
 	}
 
-	return d
+	return out
 }

@@ -1,7 +1,11 @@
 package get
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/indieinfra/scribble/server/resp"
+)
 
 func HandleConfig(w http.ResponseWriter, r *http.Request) {
-
+	resp.WriteNoContent(w)
 }

@@ -1,8 +1,7 @@
-package storage
+package media
 
 import (
 	"context"
-	"io"
 	"net/textproto"
 	"time"
 )
@@ -26,8 +25,6 @@ type MediaObject struct {
 }
 
 type MediaStore interface {
-	Upload(ctx context.Context, filename string, contentType string, r io.Reader) (*MediaObject, error)
-	Get(ctx context.Context, id string) (*MediaObject, error)
-	Delete(ctx context.Context, id string) error
-	URL(ctx context.Context, id string) (string, error)
+	Upload(ctx context.Context, file *UploadedFile) (string, error)
+	Delete(ctx context.Context, url string) error
 }

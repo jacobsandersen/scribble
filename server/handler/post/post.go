@@ -14,13 +14,18 @@ func DispatchPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	action, ok, err := body.GetString("action")
-	if err != nil {
-		resp.WriteInvalidRequest(w, fmt.Sprintf("Unexpected error while reading action: %v", err))
-		return
-	} else if !ok {
-		action = "create"
+	actionRaw, ok := body["action"]
+	if !ok {
+		actionRaw = "create"
 	}
+
+	action, ok := actionRaw.(string)
+	if !ok {
+		resp.WriteInvalidRequest(w, fmt.Sprintf("Action must be a string, got %v", action))
+		return
+	}
+
+	delete(body, "action")
 
 	switch strings.ToLower(action) {
 	case "create":
@@ -28,9 +33,9 @@ func DispatchPost(w http.ResponseWriter, r *http.Request) {
 	case "update":
 		Update(w, r, body)
 	case "delete":
-		Delete(w, r, body)
+		Delete(w, r, body, false)
 	case "undelete":
-		Undelete(w, r, body)
+		Delete(w, r, body, true)
 	default:
 		resp.WriteInvalidRequest(w, fmt.Sprintf("Unknown action: %q", action))
 	}

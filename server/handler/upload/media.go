@@ -12,7 +12,7 @@ import (
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/util"
-	"github.com/indieinfra/scribble/storage"
+	"github.com/indieinfra/scribble/storage/media"
 )
 
 func HandleMediaUpload(w http.ResponseWriter, r *http.Request) {
@@ -29,16 +29,22 @@ func HandleMediaUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = readMultipartBody(mr)
+	file, err := readMultipartBody(mr)
 	if err != nil {
 		resp.WriteInternalServerError(w, err.Error())
 		return
 	}
 
-	// TODO: use file!
+	url, err := media.ActiveMediaStore.Upload(r.Context(), file)
+	if err != nil {
+		resp.WriteInternalServerError(w, fmt.Sprintf("Error while uploading media: %v", err))
+		return
+	}
+
+	resp.WriteCreated(w, url)
 }
 
-func readMultipartBody(mr *multipart.Reader) (*storage.UploadedFile, error) {
+func readMultipartBody(mr *multipart.Reader) (*media.UploadedFile, error) {
 	for {
 		part, err := mr.NextPart()
 		if err != nil {
@@ -68,7 +74,7 @@ func readMultipartBody(mr *multipart.Reader) (*storage.UploadedFile, error) {
 	return nil, errors.New("Did not find a file in the multipart request")
 }
 
-func streamFilePart(part *multipart.Part) (*storage.UploadedFile, error) {
+func streamFilePart(part *multipart.Part) (*media.UploadedFile, error) {
 	defer part.Close()
 
 	limit := int64(config.MaxFileSize())
@@ -89,7 +95,7 @@ func streamFilePart(part *multipart.Part) (*storage.UploadedFile, error) {
 		return nil, fmt.Errorf("Uploaded file exceeds maximum file size (%v > %v bytes)", n, limit)
 	}
 
-	fh := &storage.UploadedFile{
+	fh := &media.UploadedFile{
 		Filename: part.FileName(),
 		Header:   part.Header,
 		Path:     tmp.Name(),

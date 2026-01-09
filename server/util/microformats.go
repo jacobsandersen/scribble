@@ -5,38 +5,43 @@ import (
 	"fmt"
 )
 
-func ValidateMf2(doc map[string]any) error {
-	rawType, ok := doc["type"]
-	if !ok {
-		return errors.New("missing mf2 type")
-	}
+type Mf2Document struct {
+	Type       []string         `json:"type"`
+	Properties map[string][]any `json:"properties"`
+}
 
-	typeArr, ok := rawType.([]string)
-	if !ok {
-		return errors.New("mf2 type must be an array of strings")
-	}
-
-	if len(typeArr) == 0 {
+func ValidateMf2(doc Mf2Document) error {
+	if len(doc.Type) == 0 {
 		return errors.New("mf2 type array must not be empty")
 	}
 
-	rawProps, ok := doc["properties"]
-	if !ok {
-		return errors.New("missing mf2 properties")
+	for i, t := range doc.Type {
+		if t == "" {
+			return fmt.Errorf("mf2 type[%d] is empty", i)
+		}
 	}
 
-	props, ok := rawProps.(map[string]any)
-	if !ok {
-		return errors.New("mf2 properties must be an object")
+	if doc.Properties == nil {
+		return errors.New("mf2 properties must not be nil")
 	}
 
-	for key, val := range props {
+	for key, values := range doc.Properties {
 		if key == "" {
 			return errors.New("mf2 property names must not be empty")
 		}
 
-		if _, ok := val.([]string); !ok {
-			return fmt.Errorf("mf2 property %q must be []string, got %T", key, val)
+		for i, v := range values {
+			switch x := v.(type) {
+			case string:
+				// ok
+			case Mf2Document:
+				// recursively validate embedded mf2
+				if err := ValidateMf2(x); err != nil {
+					return fmt.Errorf("invalid embedded mf2 in property %q[%d]: %w", key, i, err)
+				}
+			default:
+				return fmt.Errorf("mf2 property %q contains invalid value type %T at index %d", key, x, i)
+			}
 		}
 	}
 

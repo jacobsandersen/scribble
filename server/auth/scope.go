@@ -1,25 +1,38 @@
 package auth
 
+import (
+	"net/http"
+)
+
 type Scope int
 
 const (
-	Read Scope = iota
-	Create
-	Draft
-	Update
-	Delete
-	Undelete
-	Media
+	ScopeRead Scope = iota
+	ScopeCreate
+	ScopeDraft
+	ScopeUpdate
+	ScopeDelete
+	ScopeUndelete
+	ScopeMedia
 )
 
 var scopeName = map[Scope]string{
-	Create: "create",
-	Draft:  "draft",
-	Update: "update",
-	Delete: "delete",
-	Media:  "media",
+	ScopeCreate: "create",
+	ScopeDraft:  "draft",
+	ScopeUpdate: "update",
+	ScopeDelete: "delete",
+	ScopeMedia:  "media",
 }
 
 func (scope Scope) String() string {
 	return scopeName[scope]
+}
+
+func RequestHasScope(r *http.Request, scope Scope) bool {
+	token := GetToken(r.Context())
+	if token == nil {
+		return false
+	}
+
+	return token.HasScope(scope)
 }

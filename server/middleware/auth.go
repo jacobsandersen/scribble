@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"log"
 	"net/http"
@@ -14,10 +13,6 @@ import (
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/util"
 )
-
-type tokenKeyType struct{}
-
-var tokenKey = tokenKeyType{}
 
 func extractBearerHeader(auth string) string {
 	if auth == "" {
@@ -91,8 +86,6 @@ func ValidateTokenMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), tokenKey, details)
-
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r.WithContext(auth.AddToken(r.Context(), details)))
 	})
 }

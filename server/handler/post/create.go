@@ -4,74 +4,133 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/indieinfra/scribble/server/auth"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/util"
-	"github.com/indieinfra/scribble/storage"
+	"github.com/indieinfra/scribble/storage/content"
 )
 
-func Create(w http.ResponseWriter, r *http.Request, b *MicropubData) {
-	ct, _ := util.ExtractMediaType(w, r)
-
-	var props map[string]any
-	if ct == "application/x-www-form-urlencoded" {
-		props = normalizeFormBody(b.Properties)
-	} else {
-		props = b.Properties
+func Create(w http.ResponseWriter, r *http.Request, data map[string]any) {
+	if !auth.RequestHasScope(r, auth.ScopeCreate) {
+		resp.WriteInsufficientScope(w, "no create scope")
+		return
 	}
 
-	err := util.ValidateMf2(props)
+	ct, _ := util.ExtractMediaType(w, r)
+
+	var document util.Mf2Document
+	switch ct {
+	case "application/json":
+		document = normalizeJson(data)
+	case "application/x-www-form-urlencoded":
+		document = normalizeFormBody(data)
+	}
+
+	err := util.ValidateMf2(document)
 	if err != nil {
 		resp.WriteInvalidRequest(w, err.Error())
 		return
 	}
 
-	url, err := storage.ActiveContentStore.Create(r.Context(), nil)
+	url, err := content.ActiveContentStore.Create(r.Context(), document)
 	if err != nil {
 		resp.WriteInternalServerError(w, err.Error())
+		return
 	}
 
 	resp.WriteCreated(w, url)
 }
 
-func normalizeFormBody(props map[string]any) map[string]any {
-	normalized := map[string]any{
-		"type":       []string{"h-entry"},
-		"properties": map[string]any{},
+func normalizeJson(input map[string]any) util.Mf2Document {
+	doc := util.Mf2Document{
+		Type:       []string{"h-entry"},
+		Properties: content.MicropubProperties{},
 	}
 
-	outProps := normalized["properties"].(map[string]any)
+	if rawType, ok := input["type"]; ok {
+		switch v := rawType.(type) {
+		case string:
+			doc.Type = []string{v}
+		case []any:
+			var types []string
+			for _, t := range v {
+				if s, ok := t.(string); ok {
+					types = append(types, s)
+				}
+			}
+
+			if len(types) > 0 {
+				doc.Type = types
+			}
+		}
+	}
+
+	rawProps, ok := input["properties"]
+	if !ok {
+		return doc
+	}
+
+	props, ok := rawProps.(map[string]any)
+	if !ok {
+		return doc
+	}
+
+	for key, val := range props {
+		switch v := val.(type) {
+		case string:
+			doc.Properties[key] = []any{v}
+		case []any:
+			doc.Properties[key] = normalizeJsonArray(v)
+		case map[string]any:
+			doc.Properties[key] = []any{normalizeJson(v)}
+		}
+	}
+
+	return doc
+}
+
+func normalizeJsonArray(arr []any) []any {
+	out := make([]any, 0, len(arr))
+
+	for _, v := range arr {
+		switch x := v.(type) {
+		case string:
+			out = append(out, x)
+		case map[string]any:
+			out = append(out, normalizeJson(x))
+		}
+	}
+
+	return out
+}
+
+func normalizeFormBody(props map[string]any) util.Mf2Document {
+	doc := util.Mf2Document{
+		Type:       []string{"h-entry"},
+		Properties: content.MicropubProperties{},
+	}
 
 	for key, val := range props {
 		if key == "h" {
 			if s, ok := firstString(val); ok {
-				normalized["type"] = []string{"h-" + s}
+				doc.Type = []string{"h-" + s}
 			}
 			continue
 		}
 
 		if strings.HasSuffix(key, "[]") {
-			base, _ := strings.CutSuffix(key, "[]")
-			outProps[base] = coerceStringSlice(val)
+			key, _ = strings.CutSuffix(key, "[]")
+		}
+
+		values := coerceSlice(val)
+		if len(values) == 0 {
 			continue
 		}
 
-		switch v := val.(type) {
-		case string:
-			outProps[key] = v
-		case []any:
-			if len(v) == 1 {
-				if s, ok := v[0].(string); ok {
-					outProps[key] = s
-				} else {
-					outProps[key] = coerceStringSlice(v)
-				}
-			} else {
-				outProps[key] = coerceStringSlice(v)
-			}
-		}
+		doc.Properties[key] = values
 	}
 
-	return normalized
+	return doc
 }
 
 func firstString(v any) (string, bool) {
@@ -88,8 +147,8 @@ func firstString(v any) (string, bool) {
 	return "", false
 }
 
-func coerceStringSlice(v any) []string {
-	var out []string
+func coerceSlice(v any) []any {
+	var out []any
 
 	switch x := v.(type) {
 	case string:

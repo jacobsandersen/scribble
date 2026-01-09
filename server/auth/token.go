@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,12 +12,29 @@ import (
 	"github.com/indieinfra/scribble/config"
 )
 
+type tokenKeyType struct{}
+
+var tokenKey = tokenKeyType{}
+
 type TokenDetails struct {
 	Me       string `json:"me"`
 	ClientId string `json:"client_id"`
 	Scope    string `json:"scope"`
 	IssuedAt uint   `json:"issued_at"`
 	Nonce    int    `json:"nonce"`
+}
+
+func AddToken(ctx context.Context, details *TokenDetails) context.Context {
+	return context.WithValue(ctx, tokenKey, details)
+}
+
+func GetToken(ctx context.Context) *TokenDetails {
+	token, ok := ctx.Value(tokenKey).(*TokenDetails)
+	if !ok {
+		return nil
+	}
+
+	return token
 }
 
 func (details *TokenDetails) String() string {
