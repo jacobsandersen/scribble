@@ -10,7 +10,7 @@ import (
 	"github.com/indieinfra/scribble/server/util"
 )
 
-func ReadBody(w http.ResponseWriter, r *http.Request) map[string]any {
+func ReadBody(cfg *config.Config, w http.ResponseWriter, r *http.Request) map[string]any {
 	_, contentType, ok := util.RequireValidMicropubContentType(w, r)
 	if !ok {
 		return nil
@@ -18,18 +18,18 @@ func ReadBody(w http.ResponseWriter, r *http.Request) map[string]any {
 
 	switch contentType {
 	case "application/json":
-		return readJsonBody(w, r)
+		return readJsonBody(cfg, w, r)
 	case "application/x-www-form-urlencoded":
-		return readFormUrlEncodedBody(w, r)
+		return readFormUrlEncodedBody(cfg, w, r)
 	}
 
 	return nil
 }
 
-func readJsonBody(w http.ResponseWriter, r *http.Request) map[string]any {
+func readJsonBody(cfg *config.Config, w http.ResponseWriter, r *http.Request) map[string]any {
 	out := make(map[string]any)
 
-	r.Body = http.MaxBytesReader(w, r.Body, int64(config.MaxPayloadSize()))
+	r.Body = http.MaxBytesReader(w, r.Body, int64(cfg.Server.Limits.MaxPayloadSize))
 	if err := json.NewDecoder(r.Body).Decode(&out); err != nil {
 		resp.WriteInvalidRequest(w, "Invalid JSON body")
 		return nil
@@ -38,10 +38,10 @@ func readJsonBody(w http.ResponseWriter, r *http.Request) map[string]any {
 	return out
 }
 
-func readFormUrlEncodedBody(w http.ResponseWriter, r *http.Request) map[string]any {
+func readFormUrlEncodedBody(cfg *config.Config, w http.ResponseWriter, r *http.Request) map[string]any {
 	out := make(map[string]any)
 
-	r.Body = http.MaxBytesReader(w, r.Body, int64(config.MaxPayloadSize()))
+	r.Body = http.MaxBytesReader(w, r.Body, int64(cfg.Server.Limits.MaxPayloadSize))
 	if err := r.ParseForm(); err != nil {
 		resp.WriteInvalidRequest(w, fmt.Sprintf("Invalid form body: %v", err))
 		return nil

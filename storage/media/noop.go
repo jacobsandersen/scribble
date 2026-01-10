@@ -3,23 +3,16 @@ package media
 import (
 	"context"
 	"log"
-	"os"
+	"mime/multipart"
 )
 
 type NoopMediaStore struct{}
 
-func (ms *NoopMediaStore) Upload(ctx context.Context, file *UploadedFile) (string, error) {
+func (ms *NoopMediaStore) Upload(ctx context.Context, file *multipart.File, header *multipart.FileHeader) (string, error) {
 	log.Println("Received no-op media upload request - dumping request information")
-	log.Printf("Filename: %v", file.Filename)
-	log.Printf("Header: %v", file.Header)
-	log.Printf("Size: %v", file.Size)
-	log.Printf("Path: %v", file.Path)
-
-	log.Println("Deleting uploaded file from disk...")
-	err := os.Remove(file.Path)
-	if err != nil {
-		log.Printf("Error deleting file on disk, please do it manually: %v", err)
-	}
+	log.Printf("Filename: %v", header.Filename)
+	log.Printf("Header: %v", header.Header)
+	log.Printf("Size: %v", header.Size)
 
 	return "https://noop.example.org/noop", nil
 }

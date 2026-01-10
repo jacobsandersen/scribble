@@ -27,7 +27,7 @@ func extractBearerHeader(auth string) string {
 	return token
 }
 
-func extractTokenFromFormBody(w http.ResponseWriter, r *http.Request) string {
+func extractTokenFromFormBody(cfg *config.Config, w http.ResponseWriter, r *http.Request) string {
 	// Read at most 32K of the body to extract access token
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
 
@@ -46,7 +46,7 @@ func extractTokenFromFormBody(w http.ResponseWriter, r *http.Request) string {
 	// It is possible the payload is partially read, so an error makes sense
 	// We'll try to get an auth token anyway; the debug message nudges to prefer Auth header instead
 	if err != nil {
-		if config.Debug() {
+		if cfg.Debug {
 			log.Printf("debug: form body parse error during token extraction (consider using Auth header): %v", err)
 		}
 	}
@@ -60,7 +60,7 @@ func extractTokenFromFormBody(w http.ResponseWriter, r *http.Request) string {
 // header is not present, or does not contain a Bearer token, it aborts the request.
 // If the token is present, it performs the VerifyAccessToken routine which makes a downstream
 // http request to the defined token endpoint to validate the token.
-func ValidateTokenMiddleware(next http.Handler) http.Handler {
+func ValidateTokenMiddleware(cfg *config.Config, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var token string
 		if r.Method != http.MethodGet {
@@ -73,7 +73,7 @@ func ValidateTokenMiddleware(next http.Handler) http.Handler {
 			if token == "" && r.Method == http.MethodPost && contentType == "application/x-www-form-urlencoded" {
 				// If token is not in header, method is post, and content type is x-www-form-urlencoded...
 				// We need to check the body, unfortunately
-				token = extractTokenFromFormBody(w, r)
+				token = extractTokenFromFormBody(cfg, w, r)
 			}
 		} else {
 			token = extractBearerHeader(r.Header.Get("Authorization"))
@@ -85,7 +85,7 @@ func ValidateTokenMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		details := auth.VerifyAccessToken(token)
+		details := auth.VerifyAccessToken(cfg, token)
 		if details == nil {
 			resp.WriteForbidden(w, "Token validation failed")
 			return

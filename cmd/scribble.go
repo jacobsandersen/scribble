@@ -23,8 +23,12 @@ func main() {
 	}
 
 	log.Println("loading configuration...")
-	config.LoadAndValidateConfiguration(*configFile)
+	cfg, err := config.LoadConfig(*configFile)
+	if err != nil {
+		log.Fatalf("failed to load configuration: %v", err)
+		return
+	}
 
 	log.Println("starting http server...")
-	server.StartServer()
+	server.StartServer(cfg)
 }

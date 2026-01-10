@@ -46,7 +46,7 @@ func requireValidContentType(w http.ResponseWriter, r *http.Request, valid []str
 	if slices.Contains(valid, mediaType) {
 		return r.Method, mediaType, true
 	} else {
-		resp.WriteInvalidRequest(w, fmt.Sprintf("Invalid Content-Type: only %v allowed", valid))
+		resp.WriteInvalidRequest(w, fmt.Sprintf("Invalid Content-Type %q: only %v allowed", mediaType, valid))
 		return r.Method, mediaType, false
 	}
 }

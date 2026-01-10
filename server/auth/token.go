@@ -49,12 +49,12 @@ func (details *TokenDetails) HasMe(me string) bool {
 	return strings.Trim(strings.ToLower(me), " ") == me
 }
 
-func VerifyAccessToken(token string) *TokenDetails {
+func VerifyAccessToken(cfg *config.Config, token string) *TokenDetails {
 	if token == "" {
 		log.Panicf("error: received empty token")
 	}
 
-	tokenEndpointUrl := config.TokenEndpoint()
+	tokenEndpointUrl := cfg.Micropub.TokenEndpoint
 	req, err := http.NewRequest(http.MethodGet, tokenEndpointUrl, nil)
 	if err != nil {
 		log.Fatal(fmt.Errorf("error: could not create http request for token endpoint: %w", err))
@@ -69,7 +69,7 @@ func VerifyAccessToken(token string) *TokenDetails {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		if config.Debug() {
+		if cfg.Debug {
 			log.Printf("debug: token failed validation at token endpoint (%q)", token)
 		}
 
@@ -88,8 +88,8 @@ func VerifyAccessToken(token string) *TokenDetails {
 		return nil
 	}
 
-	if !details.HasMe(config.MeUrl()) {
-		if config.Debug() {
+	if !details.HasMe(cfg.Micropub.MeUrl) {
+		if cfg.Debug {
 			log.Printf("debug: received a valid token that did not belong to this instance! (%q)\n", token)
 		}
 
