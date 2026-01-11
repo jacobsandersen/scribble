@@ -46,14 +46,9 @@ func initialize(state *state.ScribbleState) (*state.ScribbleState, error) {
 
 func initializeContentStore(cfg *config.Content) (content.ContentStore, error) {
 	if cfg.Strategy == "git" {
-		repo, err := contentgit.OpenOrClone(cfg.Git)
+		store, err := contentgit.NewGitContentStore(cfg.Git)
 		if err != nil {
-			return nil, fmt.Errorf("...failed to init content git repo: %w", err)
-		}
-
-		store, err := contentgit.NewGitContentStore(cfg.Git, repo)
-		if err != nil {
-			return nil, fmt.Errorf("...failed to create content store: %w", err)
+			return nil, err
 		}
 
 		return store, nil

@@ -3,11 +3,15 @@ package contentgit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/config"
@@ -16,96 +20,97 @@ import (
 )
 
 type GitContentStore struct {
-	cfg      *config.GitContentStrategy
-	repo     *git.Repository
-	worktree *git.Worktree
-	auth     *transport.AuthMethod
+	cfg    *config.GitContentStrategy
+	auth   *transport.AuthMethod
+	repo   *git.Repository
+	tmpDir string
+	mu     sync.Mutex
 }
 
-func NewGitContentStore(cfg *config.GitContentStrategy, repo *git.Repository) (*GitContentStore, error) {
-	worktree, err := repo.Worktree()
-	if err != nil {
-		return nil, err
-	}
-
+func NewGitContentStore(cfg *config.GitContentStrategy) (*GitContentStore, error) {
 	auth, err := BuildGitAuth(cfg)
 	if err != nil {
 		return nil, err
 	}
 
+	tmpDir, err := os.MkdirTemp("", "scribble-*")
+	if err != nil {
+		return nil, err
+	}
+
+	repo, err := git.PlainClone(tmpDir, &git.CloneOptions{
+		URL:  cfg.Repository,
+		Auth: auth,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &GitContentStore{
-		cfg:      cfg,
-		repo:     repo,
-		worktree: worktree,
-		auth:     &auth,
+		cfg:    cfg,
+		auth:   &auth,
+		repo:   repo,
+		tmpDir: tmpDir,
 	}, nil
 }
 
 func (cs *GitContentStore) Create(ctx context.Context, doc util.Mf2Document) (string, bool, error) {
-	head, err := cs.repo.Head()
+	jsonBytes, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
-		return "", false, fmt.Errorf("failed to resolve content git HEAD: %w", err)
+		return "", false, err
 	}
-
-	resetOpts := &git.ResetOptions{Commit: head.Hash(), Mode: git.HardReset}
 
 	contentId, err := uuid.NewRandom()
 	if err != nil {
 		return "", false, err
 	}
 
-	jsonBytes, err := json.MarshalIndent(doc, "", "  ")
+	filename := contentId.String() + ".json"
+	relPath := filepath.Join(cs.cfg.Path, filename)
+
+	// Prevent races for filesystem access
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	// Make sure we are up to date with remote, in case other sources have pushed
+	if err = cs.repo.FetchContext(ctx, &git.FetchOptions{Auth: *cs.auth}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return "", false, fmt.Errorf("failed to update repo from remote: %w", err)
+	}
+
+	fullPath := filepath.Join(cs.tmpDir, relPath)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		return "", false, fmt.Errorf("failed to create required directory structure: %w", err)
+	}
+
+	if err = os.WriteFile(fullPath, jsonBytes, 0644); err != nil {
+		return "", false, fmt.Errorf("failed to write file: %w", err)
+	}
+
+	wt, err := cs.repo.Worktree()
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("failed to get new worktree: %w", err)
 	}
 
-	filename := fmt.Sprintf("%v.json", contentId.String())
-	filePath := filepath.Join(cs.cfg.LocalPath, cs.cfg.Path, filename)
-	if filePath == "" {
-		return "", false, fmt.Errorf("failed to create file path for new content (localPath: %v, subPath: %v, filename: %v)", cs.cfg.LocalPath, cs.cfg.Path, filename)
+	if _, err = wt.Add(relPath); err != nil {
+		return "", false, fmt.Errorf("failed to add file to git: %w", err)
 	}
 
-	err = os.WriteFile(filePath, jsonBytes, 0644)
+	_, err = wt.Commit("scribble(add): create content entry", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "scribble",
+			Email: "scribble@local",
+			When:  time.Now(),
+		},
+	})
 	if err != nil {
-		msg := "failed to write file"
-
-		if err := cs.worktree.Reset(resetOpts); err != nil {
-			return "", false, fmt.Errorf("%v; also, failed to reset content git worktree: %w", msg, err)
-		}
-
-		return "", false, fmt.Errorf("%v: %w", msg, err)
+		return "", false, fmt.Errorf("failed to create commit: %w", err)
 	}
 
-	_, err = cs.worktree.Add(".")
-	if err != nil {
-		msg := "failed to add new file to git"
-		if err := cs.worktree.Reset(resetOpts); err != nil {
-			return "", false, fmt.Errorf("%v; also, failed to restore worktree: %w", msg, err)
-		}
-
-		return "", false, fmt.Errorf("%v: %w", msg, err)
+	if err := cs.repo.PushContext(ctx, &git.PushOptions{Auth: *cs.auth}); err != nil {
+		return "", false, fmt.Errorf("failed to push local: %w", err)
 	}
 
-	_, err = cs.worktree.Commit("scribble(add): create content entry", &git.CommitOptions{All: true})
-	if err != nil {
-		msg := "failed to create new commit"
-		if err := cs.worktree.Reset(resetOpts); err != nil {
-			return "", false, fmt.Errorf("%v; also, failed to restore worktree: %w", msg, err)
-		}
-
-		return "", false, fmt.Errorf("%v: %w", msg, err)
-	}
-
-	if err := cs.repo.Push(&git.PushOptions{Auth: *cs.auth}); err != nil {
-		msg := "failed to push repo"
-		if err := cs.worktree.Reset(resetOpts); err != nil {
-			return "", false, fmt.Errorf("%v; also, failed to reset HEAD: %w", msg, err)
-		}
-
-		return "", false, fmt.Errorf("%v: %w", msg, err)
-	}
-
-	return fmt.Sprintf("%v/%v", cs.cfg.PublicUrl, filename), false, nil
+	return cs.cfg.PublicUrl + "/" + filename, false, nil
 }
 
 func (cs *GitContentStore) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
