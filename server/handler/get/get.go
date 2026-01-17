@@ -9,17 +9,19 @@ import (
 )
 
 func DispatchGet(st *state.ScribbleState) http.HandlerFunc {
+	handlers := map[string]func(*state.ScribbleState, http.ResponseWriter, *http.Request){
+		"config":       HandleConfig,
+		"source":       HandleSource,
+		"syndicate-to": HandleSyndicateTo,
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
-		switch q {
-		case "config":
-			HandleConfig(st, w, r)
-		case "source":
-			HandleSource(st, w, r)
-		case "syndicate-to":
-			HandleSyndicateTo(st, w, r)
-		default:
-			resp.WriteInvalidRequest(w, fmt.Sprintf("Unknown query: %q", q))
+		if handler, ok := handlers[q]; ok {
+			handler(st, w, r)
+			return
 		}
+
+		resp.WriteInvalidRequest(w, fmt.Sprintf("Unknown query: %q", q))
 	}
 }

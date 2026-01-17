@@ -60,8 +60,13 @@ type Media struct {
 }
 
 type S3MediaStrategy struct {
-	AccessKeyId string `mapstructure:"access_key_id" validate:"required"`
-	SecretKeyId string `mapstructure:"secret_key_id" validate:"required"`
-	Region      string `mapstructure:"region" validate:"required"`
-	Bucket      string `mapstructure:"bucket" validate:"required"`
+	AccessKeyId    string `mapstructure:"access_key_id" validate:"required"`
+	SecretKeyId    string `mapstructure:"secret_key_id" validate:"required"`
+	Region         string `mapstructure:"region" validate:"omitempty"`
+	Bucket         string `mapstructure:"bucket" validate:"required"`
+	Endpoint       string `mapstructure:"endpoint" validate:"omitempty,url"`
+	ForcePathStyle bool   `mapstructure:"force_path_style"`
+	DisableSSL     bool   `mapstructure:"disable_ssl"`
+	Prefix         string `mapstructure:"prefix"`
+	PublicUrl      string `mapstructure:"public_url" validate:"omitempty,url"`
 }

@@ -5,14 +5,14 @@ import (
 	"net/http"
 
 	"github.com/indieinfra/scribble/server/auth"
+	"github.com/indieinfra/scribble/server/handler/common"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/server/util"
 )
 
 func Update(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, data map[string]any) {
-	if !auth.RequestHasScope(r, auth.ScopeUpdate) {
-		resp.WriteInsufficientScope(w, "no update scope")
+	if !requireScope(w, r, auth.ScopeUpdate) {
 		return
 	}
 
@@ -48,7 +48,7 @@ func Update(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 
 	newUrl, err := st.ContentStore.Update(r.Context(), url, replacements, additions, deletions)
 	if err != nil {
-		resp.WriteInternalServerError(w, err.Error())
+		common.LogAndWriteError(w, r, "update content", err)
 		return
 	}
 

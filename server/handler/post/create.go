@@ -1,11 +1,14 @@
 package post
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/server/auth"
+	"github.com/indieinfra/scribble/server/handler/common"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/server/util"
@@ -13,60 +16,35 @@ import (
 )
 
 func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, data map[string]any) {
-	if !auth.RequestHasScope(r, auth.ScopeCreate) {
-		resp.WriteInsufficientScope(w, "no create scope")
+	if !requireScope(w, r, auth.ScopeCreate) {
 		return
 	}
 
 	ct, _ := util.ExtractMediaType(w, r)
 
-	var document util.Mf2Document
-	switch ct {
-	case "application/json":
-		document = normalizeJson(data)
-	case "application/x-www-form-urlencoded":
-		document = normalizeFormBody(data)
-		delete(document.Properties, "access_token")
-	}
-
-	err := util.ValidateMf2(document)
+	document, err := buildDocument(ct, data)
 	if err != nil {
 		resp.WriteInvalidRequest(w, err.Error())
 		return
 	}
 
-	// Process server commands (mp-* properties)
-	suggestedSlug := processMpProperties(&document)
-
-	// If no suggested slug, generate one from content
-	if suggestedSlug == "" {
-		suggestedSlug = util.GenerateSlug(document)
-	}
-
-	// If still no slug, return error - document must have content or name
+	suggestedSlug := deriveSuggestedSlug(&document)
 	if suggestedSlug == "" {
 		resp.WriteInvalidRequest(w, "unable to generate slug: document must contain a name or content property")
 		return
 	}
 
-	// Check if slug already exists
-	exists, err := st.ContentStore.ExistsBySlug(r.Context(), suggestedSlug)
-	if exists || err != nil {
-		uuid, err := uuid.NewRandom()
-		if err != nil {
-			resp.WriteInternalServerError(w, "slug clash - failed to create UUID while attempting to resolve")
-			return
-		}
-
-		suggestedSlug += uuid.String()
+	finalSlug, err := ensureUniqueSlug(r.Context(), st.ContentStore, suggestedSlug)
+	if err != nil {
+		common.LogAndWriteError(w, r, "slug lookup", err)
+		return
 	}
 
-	// Store the final slug as "slug" property (not mp-slug)
-	document.Properties["slug"] = []any{suggestedSlug}
+	document.Properties["slug"] = []any{finalSlug}
 
 	url, now, err := st.ContentStore.Create(r.Context(), document)
 	if err != nil {
-		resp.WriteInternalServerError(w, err.Error())
+		common.LogAndWriteError(w, r, "create content", err)
 		return
 	}
 
@@ -75,6 +53,52 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 	} else {
 		resp.WriteAccepted(w, url)
 	}
+}
+
+func buildDocument(contentType string, data map[string]any) (util.Mf2Document, error) {
+	var doc util.Mf2Document
+
+	switch contentType {
+	case "application/json":
+		doc = normalizeJson(data)
+	case "application/x-www-form-urlencoded":
+		doc = normalizeFormBody(data)
+		delete(doc.Properties, "access_token")
+	default:
+		return util.Mf2Document{}, fmt.Errorf("unsupported content type %q", contentType)
+	}
+
+	if err := util.ValidateMf2(doc); err != nil {
+		return util.Mf2Document{}, err
+	}
+
+	return doc, nil
+}
+
+func deriveSuggestedSlug(doc *util.Mf2Document) string {
+	suggestedSlug := processMpProperties(doc)
+	if suggestedSlug != "" {
+		return suggestedSlug
+	}
+
+	return util.GenerateSlug(*doc)
+}
+
+func ensureUniqueSlug(ctx context.Context, store content.ContentStore, slug string) (string, error) {
+	exists, err := store.ExistsBySlug(ctx, slug)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		return slug, nil
+	}
+
+	suffix, err := uuid.NewRandom()
+	if err != nil {
+		return "", err
+	}
+
+	return slug + suffix.String(), nil
 }
 
 func normalizeJson(input map[string]any) util.Mf2Document {

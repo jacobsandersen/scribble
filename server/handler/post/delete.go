@@ -1,10 +1,10 @@
 package post
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/indieinfra/scribble/server/auth"
+	"github.com/indieinfra/scribble/server/handler/common"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 )
@@ -22,30 +22,26 @@ func Delete(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 		return
 	}
 
-	var err error = nil
 	if isUndelete {
-		if !auth.RequestHasScope(r, auth.ScopeUndelete) {
-			resp.WriteInsufficientScope(w, "no undelete scope")
+		if !requireScope(w, r, auth.ScopeUndelete) {
 			return
 		}
 
-		url, isNewUrl, err2 := st.ContentStore.Undelete(r.Context(), url)
-		if err2 != nil {
-			resp.WriteInternalServerError(w, fmt.Sprintf("Error during undeletion: %v", err))
+		url, isNewUrl, err := st.ContentStore.Undelete(r.Context(), url)
+		if err != nil {
+			common.LogAndWriteError(w, r, "undelete content", err)
 		} else if isNewUrl {
 			resp.WriteCreated(w, url)
 		} else {
 			resp.WriteNoContent(w)
 		}
 	} else {
-		if !auth.RequestHasScope(r, auth.ScopeDelete) {
-			resp.WriteInsufficientScope(w, "no delete scope")
+		if !requireScope(w, r, auth.ScopeDelete) {
 			return
 		}
 
-		err2 := st.ContentStore.Delete(r.Context(), url)
-		if err2 != nil {
-			resp.WriteInternalServerError(w, fmt.Sprintf("Error during deletion: %v", err))
+		if err := st.ContentStore.Delete(r.Context(), url); err != nil {
+			common.LogAndWriteError(w, r, "delete content", err)
 		} else {
 			resp.WriteNoContent(w)
 		}

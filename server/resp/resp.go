@@ -55,6 +55,10 @@ func WriteInternalServerError(w http.ResponseWriter, description string) {
 	writeError(w, http.StatusInternalServerError, "internal_server_error", description)
 }
 
+func WriteNotFound(w http.ResponseWriter, description string) {
+	writeError(w, http.StatusNotFound, "not_found", description)
+}
+
 func writeError(w http.ResponseWriter, status int, err string, description string) {
 	writeResp(w, status, ErrorResponse{
 		Error:       err,

@@ -3,6 +3,7 @@ package get
 import (
 	"net/http"
 
+	"github.com/indieinfra/scribble/server/handler/common"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 )
@@ -18,7 +19,7 @@ func HandleSource(st *state.ScribbleState, w http.ResponseWriter, r *http.Reques
 
 	doc, err := st.ContentStore.Get(r.Context(), url)
 	if err != nil {
-		resp.WriteInternalServerError(w, err.Error())
+		common.LogAndWriteError(w, r, "get content", err)
 		return
 	}
 

@@ -242,7 +242,7 @@ func (cs *GitContentStore) Create(ctx context.Context, doc util.Mf2Document) (st
 }
 
 func (cs *GitContentStore) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
-	slug, err := slugFromURL(url)
+	slug, err := util.SlugFromURL(url)
 	if err != nil {
 		return url, err
 	}
@@ -259,7 +259,7 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 		return url, err
 	}
 	if doc == nil {
-		return url, fmt.Errorf("document not found")
+		return url, ErrNotFound
 	}
 
 	if doc.Properties == nil {
@@ -340,7 +340,7 @@ func (cs *GitContentStore) Undelete(ctx context.Context, url string) (string, bo
 }
 
 func (cs *GitContentStore) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
-	slug, err := slugFromURL(url)
+	slug, err := util.SlugFromURL(url)
 	if err != nil {
 		return nil, err
 	}
@@ -357,24 +357,10 @@ func (cs *GitContentStore) Get(ctx context.Context, url string) (*util.Mf2Docume
 		return nil, err
 	}
 	if doc == nil {
-		return nil, fmt.Errorf("document not found")
+		return nil, ErrNotFound
 	}
 
 	return doc, nil
-}
-
-func slugFromURL(url string) (string, error) {
-	parts := strings.Split(strings.TrimSuffix(url, "/"), "/")
-	if len(parts) == 0 {
-		return "", fmt.Errorf("invalid url")
-	}
-
-	slug := parts[len(parts)-1]
-	if slug == "" {
-		return "", fmt.Errorf("url does not have a valid slug")
-	}
-
-	return slug, nil
 }
 
 func (cs *GitContentStore) readDocumentBySlug(slug string) (*util.Mf2Document, error) {
@@ -421,7 +407,7 @@ func (cs *GitContentStore) readDocumentBySlug(slug string) (*util.Mf2Document, e
 }
 
 func (cs *GitContentStore) setDeletedStatus(ctx context.Context, url string, deleted bool) (string, error) {
-	slug, err := slugFromURL(url)
+	slug, err := util.SlugFromURL(url)
 	if err != nil {
 		return url, err
 	}
@@ -438,7 +424,7 @@ func (cs *GitContentStore) setDeletedStatus(ctx context.Context, url string, del
 		return url, err
 	}
 	if doc == nil {
-		return url, fmt.Errorf("document not found")
+		return url, ErrNotFound
 	}
 
 	if doc.Properties == nil {

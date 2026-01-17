@@ -1,11 +1,59 @@
+# Whether to print debug messages
+# Warning: could be noisy!
+debug: true
+
 server:
-  address: ":"
+  # What address to bind to?
+  address: "0.0.0.0"
+
+  # What port to bind to?
   port: 9000
+
+  # The externally available URL for Scribble
+  # This is used for self-references, especially in the config endpoint
+  public_url: "https://scribble.example.org"
+
+  # Max body size in bytes
+  limits:
+    # How big can a normal request be at maximum? 2MB by default. You may wish to lower this.
+    # This will apply to JSON and form encoded bodies, but does not apply to multipart (file upload) requests.
+    max_payload_size: 2_000_000
+
+    # How big can a file upload be at maximum? 10MB by default. You may wish to adjust this.
+    max_file_size: 10_000_000
 
 micropub:
   # Your domain
-  me_url: "https://your.domain"
+  me_url: "https://example.org"
 
   # Where to validate incoming tokens
   # IndieAuth by default, or use your own
-  token_endpoint: "https://tokens.indieauth.com"
+  token_endpoint: "https://tokens.indieauth.com/token"
+
+content:
+  strategy: git
+  git:
+    repository: "https://github.com/myusername/my-website.git"
+    path: "src/content/scribble"
+    public_url: "https://example.org/content/permalink"
+    auth:
+      method: plain
+      plain:
+        username: "replaceme"
+        password: "replaceme"
+      sshkey:
+        private_key_file: ""
+        passphrase: ""
+
+media:
+  strategy: s3
+  s3:
+    access_key_id: "replaceme"
+    secret_key_id: "replaceme"
+    region: "ap-southeast-1"
+    bucket: "mybucket"
+    endpoint: "https://s3.ap-southeast-1.amazonaws.com" # or your R2/Backblaze/MinIO endpoint
+    force_path_style: false
+    disable_ssl: false
+    prefix: ""
+    public_url: "" # optional CDN/base URL override

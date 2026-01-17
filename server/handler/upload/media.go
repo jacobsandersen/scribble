@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/indieinfra/scribble/server/handler/common"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/server/util"
@@ -34,7 +35,7 @@ func HandleMediaUpload(st *state.ScribbleState) http.HandlerFunc {
 
 		url, err := st.MediaStore.Upload(r.Context(), &file, header)
 		if err != nil {
-			resp.WriteInternalServerError(w, fmt.Sprintf("Error while uploading media: %v", err))
+			common.LogAndWriteError(w, r, "upload media", err)
 			return
 		}
 

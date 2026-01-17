@@ -47,7 +47,8 @@ func extractTokenFromFormBody(cfg *config.Config, w http.ResponseWriter, r *http
 	// We'll try to get an auth token anyway; the debug message nudges to prefer Auth header instead
 	if err != nil {
 		if cfg.Debug {
-			log.Printf("debug: form body parse error during token extraction (consider using Auth header): %v", err)
+			rl := util.WithRequest(log.Default(), r, "")
+			rl.Infof("form body parse error during token extraction (consider using Auth header): %v", err)
 		}
 	}
 
@@ -90,6 +91,8 @@ func ValidateTokenMiddleware(cfg *config.Config, next http.Handler) http.Handler
 			return
 		}
 
-		next.ServeHTTP(w, r.WithContext(auth.AddToken(r.Context(), details)))
+		rl := util.WithRequest(log.Default(), r, details.Me)
+		ctx := util.ContextWithLogger(r.Context(), rl)
+		next.ServeHTTP(w, r.WithContext(auth.AddToken(ctx, details)))
 	})
 }

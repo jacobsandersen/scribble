@@ -30,5 +30,7 @@ func main() {
 	}
 
 	log.Println("starting server...")
-	server.StartServer(cfg)
+	if err := server.StartServer(cfg); err != nil {
+		log.Fatalf("server exited with error: %v", err)
+	}
 }

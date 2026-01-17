@@ -1,0 +1,171 @@
+package media
+
+import (
+	"context"
+	"fmt"
+	"mime/multipart"
+	"net/url"
+	"path"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+
+	"github.com/indieinfra/scribble/config"
+)
+
+// S3MediaStore uploads media to S3 or any compatible service (R2, Backblaze, MinIO).
+type S3MediaStore struct {
+	client         *minio.Client
+	bucket         string
+	prefix         string
+	publicBase     string
+	forcePathStyle bool
+	endpointHost   string
+	secure         bool
+	region         string
+}
+
+func NewS3MediaStore(cfg *config.Media) (*S3MediaStore, error) {
+	if cfg == nil || cfg.S3 == nil {
+		return nil, fmt.Errorf("s3 config is required")
+	}
+
+	s3cfg := cfg.S3
+	region := strings.TrimSpace(s3cfg.Region)
+	if strings.EqualFold(region, "auto") {
+		region = ""
+	}
+	endpointHost := strings.TrimSpace(s3cfg.Endpoint)
+	if endpointHost == "" {
+		if region == "" {
+			endpointHost = "s3.amazonaws.com"
+		} else {
+			endpointHost = fmt.Sprintf("s3.%s.amazonaws.com", region)
+		}
+	} else {
+		if parsed, err := url.Parse(endpointHost); err == nil && parsed.Host != "" {
+			endpointHost = parsed.Host
+		}
+	}
+
+	secure := !s3cfg.DisableSSL
+	lookup := minio.BucketLookupAuto
+	if s3cfg.ForcePathStyle {
+		lookup = minio.BucketLookupPath
+	}
+
+	client, err := minio.New(endpointHost, &minio.Options{
+		Creds:        credentials.NewStaticV4(s3cfg.AccessKeyId, s3cfg.SecretKeyId, ""),
+		Secure:       secure,
+		Region:       region,
+		BucketLookup: lookup,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create s3 client: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	exists, err := client.BucketExists(ctx, s3cfg.Bucket)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify s3 bucket %q: %w", s3cfg.Bucket, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("s3 bucket %q does not exist or is not accessible", s3cfg.Bucket)
+	}
+
+	return &S3MediaStore{
+		client:         client,
+		bucket:         s3cfg.Bucket,
+		prefix:         strings.TrimPrefix(s3cfg.Prefix, "/"),
+		publicBase:     strings.TrimSuffix(s3cfg.PublicUrl, "/"),
+		forcePathStyle: s3cfg.ForcePathStyle,
+		endpointHost:   endpointHost,
+		secure:         secure,
+		region:         s3cfg.Region,
+	}, nil
+}
+
+func (s *S3MediaStore) Upload(ctx context.Context, file *multipart.File, header *multipart.FileHeader) (string, error) {
+	if file == nil || header == nil {
+		return "", fmt.Errorf("file and header are required")
+	}
+
+	key := s.objectKey(header.Filename)
+
+	opts := minio.PutObjectOptions{ContentType: header.Header.Get("Content-Type")}
+
+	if _, err := s.client.PutObject(ctx, s.bucket, key, *file, header.Size, opts); err != nil {
+		return "", fmt.Errorf("upload to s3 failed: %w", err)
+	}
+
+	return s.objectURL(key), nil
+}
+
+func (s *S3MediaStore) Delete(ctx context.Context, urlStr string) error {
+	key, err := s.keyFromURL(urlStr)
+	if err != nil {
+		return err
+	}
+
+	if err := s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{}); err != nil {
+		return fmt.Errorf("delete from s3 failed: %w", err)
+	}
+
+	return nil
+}
+
+func (s *S3MediaStore) objectKey(filename string) string {
+	name := path.Base(filename)
+	if name == "." || name == "" {
+		name = "upload"
+	}
+
+	stamp := time.Now().UTC().Format("2006/01/02")
+	key := path.Join(stamp, uuid.NewString()+"-"+name)
+
+	if s.prefix != "" {
+		key = path.Join(s.prefix, key)
+	}
+
+	return key
+}
+
+func (s *S3MediaStore) objectURL(key string) string {
+	if s.publicBase != "" {
+		return s.publicBase + "/" + key
+	}
+
+	scheme := "https"
+	if !s.secure {
+		scheme = "http"
+	}
+
+	if s.forcePathStyle {
+		return fmt.Sprintf("%s://%s/%s/%s", scheme, s.endpointHost, s.bucket, key)
+	}
+
+	return fmt.Sprintf("%s://%s.%s/%s", scheme, s.bucket, s.endpointHost, key)
+}
+
+func (s *S3MediaStore) keyFromURL(urlStr string) (string, error) {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid media url: %w", err)
+	}
+
+	key := strings.TrimPrefix(u.Path, "/")
+	if strings.HasPrefix(key, s.bucket+"/") {
+		key = strings.TrimPrefix(key, s.bucket+"/")
+	}
+
+	if key == "" {
+		return "", fmt.Errorf("could not derive object key from url")
+	}
+
+	return key, nil
+}

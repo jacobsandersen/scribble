@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/server/handler/get"
@@ -15,61 +17,80 @@ import (
 	"github.com/indieinfra/scribble/server/middleware"
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/storage/content"
+	contentfactory "github.com/indieinfra/scribble/storage/content/factory"
 	"github.com/indieinfra/scribble/storage/media"
+	mediafactory "github.com/indieinfra/scribble/storage/media/factory"
 )
 
-func StartServer(cfg *config.Config) {
+func StartServer(cfg *config.Config) error {
 	log.Println("initializing...")
-	state, err := initialize(&state.ScribbleState{Cfg: cfg})
+	st, err := initialize(&state.ScribbleState{Cfg: cfg})
 	if err != nil {
-		log.Fatalf("initialization failed: %v", err)
-		return
+		return fmt.Errorf("initialization failed: %w", err)
 	}
-
-	// Setup cleanup on shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		<-sigChan
-		log.Println("shutting down...")
-		cleanup(state)
-		os.Exit(0)
-	}()
 
 	log.Println("configuring routes...")
 	mux := http.NewServeMux()
-	mux.Handle("GET /", middleware.ValidateTokenMiddleware(state.Cfg, get.DispatchGet(state)))
-	mux.Handle("POST /", middleware.ValidateTokenMiddleware(state.Cfg, post.DispatchPost(state)))
-	mux.Handle("POST /media", middleware.ValidateTokenMiddleware(state.Cfg, upload.HandleMediaUpload(state)))
+	mux.Handle("GET /", middleware.ValidateTokenMiddleware(st.Cfg, get.DispatchGet(st)))
+	mux.Handle("POST /", middleware.ValidateTokenMiddleware(st.Cfg, post.DispatchPost(st)))
+	mux.Handle("POST /media", middleware.ValidateTokenMiddleware(st.Cfg, upload.HandleMediaUpload(st)))
 
-	bindAddress := fmt.Sprintf("%v:%v", state.Cfg.Server.Address, state.Cfg.Server.Port)
-	log.Printf("serving http requests on %q", bindAddress)
-	log.Fatal(http.ListenAndServe(bindAddress, mux))
+	srv := &http.Server{
+		Addr:    fmt.Sprintf("%v:%v", st.Cfg.Server.Address, st.Cfg.Server.Port),
+		Handler: mux,
+	}
+
+	// Start serving in background to support graceful shutdown.
+	errChan := make(chan error, 1)
+	go func() {
+		log.Printf("serving http requests on %q", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errChan <- err
+		}
+	}()
+
+	// Listen for termination signals.
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case sig := <-sigChan:
+		log.Printf("received signal %v, shutting down...", sig)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("graceful shutdown failed: %v", err)
+		}
+		cleanup(st)
+		return nil
+	case err := <-errChan:
+		cleanup(st)
+		return err
+	}
 }
 
-func initialize(state *state.ScribbleState) (*state.ScribbleState, error) {
-	contentStore, err := initializeContentStore(&state.Cfg.Content)
+func initialize(st *state.ScribbleState) (*state.ScribbleState, error) {
+	contentStore, err := initializeContentStore(&st.Cfg.Content)
 	if err != nil {
 		return nil, err
 	}
-	state.ContentStore = contentStore
-	state.MediaStore = &media.NoopMediaStore{}
+	st.ContentStore = contentStore
 
-	return state, nil
+	mediaStore, err := initializeMediaStore(&st.Cfg.Media)
+	if err != nil {
+		return nil, err
+	}
+	st.MediaStore = mediaStore
+
+	return st, nil
 }
 
 func initializeContentStore(cfg *config.Content) (content.ContentStore, error) {
-	if cfg.Strategy == "git" {
-		store, err := content.NewGitContentStore(cfg.Git)
-		if err != nil {
-			return nil, err
-		}
+	return contentfactory.Create(cfg)
+}
 
-		return store, nil
-	}
-
-	return nil, fmt.Errorf("...unknown content strategy %q", cfg.Strategy)
+func initializeMediaStore(cfg *config.Media) (media.MediaStore, error) {
+	return mediafactory.Create(cfg)
 }
 
 func cleanup(state *state.ScribbleState) {
