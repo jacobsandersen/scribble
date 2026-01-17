@@ -244,9 +244,8 @@ func TestGitContentStore_ExistsBySlug(t *testing.T) {
 	doc := util.Mf2Document{
 		Type: []string{"h-entry"},
 		Properties: map[string][]any{
-			"slug":    {"post-4"},
-			"mp-slug": {"post-4"},
-			"name":    {"Hello"},
+			"slug": {"post-4"},
+			"name": {"Hello"},
 		},
 	}
 

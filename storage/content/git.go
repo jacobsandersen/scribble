@@ -528,6 +528,14 @@ func (cs *GitContentStore) ExistsBySlug(ctx context.Context, slug string) (bool,
 		return false, err
 	}
 
+	// Fast path: check for filename match to avoid deserializing documents.
+	target := filepath.Join(strings.TrimSuffix(cs.cfg.Path, "/"), slug+".json")
+	if _, err := tree.File(target); err == nil {
+		return true, nil
+	} else if !errors.Is(err, object.ErrFileNotFound) {
+		return false, err
+	}
+
 	basePath := strings.TrimSuffix(cs.cfg.Path, "/") + "/"
 	err = tree.Files().ForEach(func(f *object.File) error {
 		if !strings.HasPrefix(f.Name, basePath) {
@@ -555,12 +563,12 @@ func (cs *GitContentStore) ExistsBySlug(ctx context.Context, slug string) (bool,
 			return nil
 		}
 
-		docSlugs := doc.Properties["mp-slug"]
-		if len(docSlugs) == 0 {
+		slugProps := doc.Properties["slug"]
+		if len(slugProps) == 0 {
 			return nil
 		}
 
-		docSlug, ok := docSlugs[0].(string)
+		docSlug, ok := slugProps[0].(string)
 		if !ok {
 			return nil
 		}
