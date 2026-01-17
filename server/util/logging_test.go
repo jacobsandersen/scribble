@@ -38,19 +38,23 @@ func TestRequestLoggerPrefixes(t *testing.T) {
 }
 
 func TestContextWithLoggerRoundTrip(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	logger := &stubLogger{}
-	rl := WithRequest(logger, req, "")
+	t.Run("stores and retrieves logger", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		logger := &stubLogger{}
+		rl := WithRequest(logger, req, "")
 
-	ctx := ContextWithLogger(context.Background(), rl)
-	got := FromContext(ctx)
-	if got != rl {
-		t.Fatalf("expected to retrieve same logger from context")
-	}
+		ctx := ContextWithLogger(context.Background(), rl)
+		got := FromContext(ctx)
+		if got != rl {
+			t.Fatalf("expected to retrieve same logger from context")
+		}
+	})
 
-	if FromContext(nil) != nil {
-		t.Fatalf("expected nil context to return nil logger")
-	}
+	t.Run("returns nil when logger absent", func(t *testing.T) {
+		if FromContext(context.Background()) != nil {
+			t.Fatalf("expected background context without logger to return nil")
+		}
+	})
 }
 
 func containsAll(s string, parts []string) bool {
