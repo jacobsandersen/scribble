@@ -3,6 +3,8 @@ package post
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -28,6 +30,13 @@ func (s *stubStore) Delete(context.Context, string) error                   { re
 func (s *stubStore) Undelete(context.Context, string) (string, bool, error) { return "", false, nil }
 func (s *stubStore) Get(context.Context, string) (*util.Mf2Document, error) { return nil, nil }
 
+type stubMediaStoreErr struct{ err error }
+
+func (s *stubMediaStoreErr) Upload(context.Context, *multipart.File, *multipart.FileHeader) (string, error) {
+	return "", s.err
+}
+func (s *stubMediaStoreErr) Delete(context.Context, string) error { return nil }
+
 func TestDeriveSuggestedSlug(t *testing.T) {
 	t.Run("mp-slug wins", func(t *testing.T) {
 		doc := util.Mf2Document{Properties: map[string][]any{"mp-slug": []any{"custom"}}}
@@ -50,6 +59,44 @@ func TestDeriveSuggestedSlug(t *testing.T) {
 			t.Fatalf("expected uuid fallback slug")
 		}
 	})
+}
+
+func TestBuildDocumentUnsupportedContentType(t *testing.T) {
+	if _, err := buildDocument("text/plain", map[string]any{}); err == nil {
+		t.Fatalf("expected unsupported content type to error")
+	}
+}
+
+func TestNormalizeJsonVariants(t *testing.T) {
+	input := map[string]any{
+		"type": "h-card",
+		"properties": map[string]any{
+			"name":      "Alice",
+			"category":  []any{"go", map[string]any{"html": []any{"<b>hi</b>"}}, nil, 123, true},
+			"note":      map[string]any{"html": "<p>note</p>"},
+			"skip-nil":  nil,
+			"zero-bool": false,
+		},
+	}
+
+	doc := normalizeJson(input)
+
+	if got := doc.Type[0]; got != "h-card" {
+		t.Fatalf("expected type from json, got %q", got)
+	}
+	cat := doc.Properties["category"]
+	if len(cat) != 4 {
+		t.Fatalf("expected nils skipped and mixed values preserved, got %#v", cat)
+	}
+	if note, ok := doc.Properties["note"]; !ok || len(note) != 1 {
+		t.Fatalf("expected note map to be preserved, got %#v", note)
+	}
+	if _, exists := doc.Properties["skip-nil"]; exists {
+		t.Fatalf("expected nil property to be omitted")
+	}
+	if zero, ok := doc.Properties["zero-bool"]; !ok || len(zero) != 1 || zero[0] != false {
+		t.Fatalf("expected bool to be preserved, got %#v", zero)
+	}
 }
 
 func TestEnsureUniqueSlug(t *testing.T) {
@@ -150,6 +197,32 @@ func TestMediaPropertyForUpload(t *testing.T) {
 	}
 }
 
+func TestCreateSlugLookupError(t *testing.T) {
+	st := newState()
+	cs := &stubContentStore{existsErr: errors.New("boom"), forbidCreate: true}
+	st.ContentStore = cs
+	st.MediaStore = &stubMediaStore{}
+
+	payload := map[string]any{
+		"type":       []any{"h-entry"},
+		"properties": map[string]any{"name": []any{"Hello"}},
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.AddToken(req.Context(), &auth.TokenDetails{Me: st.Cfg.Micropub.MeUrl, Scope: "create"}))
+
+	rr := httptest.NewRecorder()
+	Create(st, rr, req, &ParsedBody{Data: map[string]any{"type": []any{"h-entry"}, "properties": map[string]any{"name": []any{"Hello"}}}})
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when slug lookup fails, got %d", rr.Code)
+	}
+	if cs.createCalled {
+		t.Fatalf("expected content create not to be called on slug error")
+	}
+}
+
 func TestCreateMultipartAccepted(t *testing.T) {
 	st := newState()
 	cs := &stubContentStore{createURL: "https://example.org/pending", createNow: false}
@@ -194,5 +267,67 @@ func TestCreateMultipartAccepted(t *testing.T) {
 	}
 	if token := parsed.AccessToken; token != "bodytoken" {
 		t.Fatalf("expected access token to be popped from body, got %q", token)
+	}
+}
+
+func TestCreateUploadError(t *testing.T) {
+	st := newState()
+	cs := &stubContentStore{forbidCreate: true}
+	st.ContentStore = cs
+	st.MediaStore = &stubMediaStoreErr{err: errors.New("upload failed")}
+
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	_ = w.WriteField("h", "entry")
+	fw, _ := w.CreateFormFile("photo", "pic.jpg")
+	_, _ = fw.Write([]byte("data"))
+	w.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req = req.WithContext(auth.AddToken(req.Context(), &auth.TokenDetails{Me: st.Cfg.Micropub.MeUrl, Scope: "create"}))
+
+	rr := httptest.NewRecorder()
+	parsed, ok := ReadBody(st.Cfg, rr, req)
+	if !ok {
+		t.Fatalf("expected body to parse")
+	}
+	Create(st, rr, req, parsed)
+	for _, pf := range parsed.Files {
+		pf.File.Close()
+	}
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when upload fails, got %d", rr.Code)
+	}
+	if cs.createCalled {
+		t.Fatalf("expected create not to be called on upload failure")
+	}
+}
+
+func TestCreateContentStoreError(t *testing.T) {
+	st := newState()
+	cs := &stubContentStore{createErr: errors.New("store boom")}
+	st.ContentStore = cs
+	st.MediaStore = &stubMediaStore{}
+
+	payload := map[string]any{
+		"type":       []any{"h-entry"},
+		"properties": map[string]any{"name": []any{"Hello"}},
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.AddToken(req.Context(), &auth.TokenDetails{Me: st.Cfg.Micropub.MeUrl, Scope: "create"}))
+
+	rr := httptest.NewRecorder()
+	parsed, ok := ReadBody(st.Cfg, rr, req)
+	if !ok {
+		t.Fatalf("expected body to parse")
+	}
+	Create(st, rr, req, parsed)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when content store fails, got %d", rr.Code)
 	}
 }

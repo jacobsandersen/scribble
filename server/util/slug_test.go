@@ -51,10 +51,25 @@ func TestSlugFromURL(t *testing.T) {
 	}
 }
 
+func TestSlugFromURL_Errors(t *testing.T) {
+	if _, err := SlugFromURL(""); err == nil {
+		t.Fatalf("expected error for empty url")
+	}
+
+	if _, err := SlugFromURL("/"); err == nil {
+		t.Fatalf("expected error for root slash")
+	}
+}
+
 func TestExtractTextFromProperty(t *testing.T) {
 	val := extractTextFromProperty([]any{map[string]any{"html": "<p>Hello <b>world</b></p>"}})
 	if val == "" {
 		t.Fatalf("expected html text to be extracted")
+	}
+
+	val = extractTextFromProperty([]any{map[string]any{"html": []any{"<p>Array</p>"}}})
+	if val == "" {
+		t.Fatalf("expected html array text to be extracted")
 	}
 
 	if val := extractTextFromProperty([]any{nil, ""}); val != "" {

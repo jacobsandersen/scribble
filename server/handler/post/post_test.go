@@ -18,19 +18,27 @@ import (
 
 type stubContentStore struct {
 	exists       bool
+	existsErr    error
 	createCalled bool
 	lastDoc      util.Mf2Document
 	createURL    string
 	createNow    bool
 	forbidCreate bool
+	createErr    error
 }
 
 func (s *stubContentStore) ExistsBySlug(_ context.Context, _ string) (bool, error) {
+	if s.existsErr != nil {
+		return false, s.existsErr
+	}
 	return s.exists, nil
 }
 func (s *stubContentStore) Create(_ context.Context, doc util.Mf2Document) (string, bool, error) {
 	if s.forbidCreate {
 		panic("Create should not be called")
+	}
+	if s.createErr != nil {
+		return "", false, s.createErr
 	}
 	s.createCalled = true
 	s.lastDoc = doc
@@ -136,5 +144,24 @@ func TestDispatchPost_UnknownAction(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unknown action, got %d", rr.Code)
+	}
+}
+
+func TestDispatchPost_ActionMustBeString(t *testing.T) {
+	st := newState()
+	st.ContentStore = &stubContentStore{forbidCreate: true}
+	st.MediaStore = &stubMediaStore{}
+
+	payload := map[string]any{"action": 123}
+	b, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.AddToken(req.Context(), &auth.TokenDetails{Me: st.Cfg.Micropub.MeUrl, Scope: "create"}))
+
+	rr := httptest.NewRecorder()
+	DispatchPost(st).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for non-string action, got %d", rr.Code)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"testing"
 )
 
@@ -86,6 +87,61 @@ func TestParseMultipartFiles_MissingRequired(t *testing.T) {
 	}
 }
 
+func TestParseMultipartFiles_AllowsMissingWhenOptional(t *testing.T) {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	_ = w.WriteField("title", "hello")
+	w.Close()
+
+	req := httptest.NewRequest("POST", "/", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rr := httptest.NewRecorder()
+
+	values, files, ok := ParseMultipartFiles(rr, req, 1<<20, 1<<20, []string{"photo"}, false)
+	if !ok {
+		t.Fatalf("expected parsing to succeed when file optional")
+	}
+	if len(files) != 0 {
+		t.Fatalf("expected no files returned when optional and absent")
+	}
+	if values["title"].(string) != "hello" {
+		t.Fatalf("expected form values to parse")
+	}
+}
+
+func TestParseMultipartFiles_MissingFilename(t *testing.T) {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	head := textproto.MIMEHeader{}
+	head.Set("Content-Disposition", `form-data; name="photo"; filename=""`)
+	part, _ := w.CreatePart(head)
+	_, _ = part.Write([]byte("abc"))
+	w.Close()
+
+	req := httptest.NewRequest("POST", "/", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rr := httptest.NewRecorder()
+
+	if _, _, ok := ParseMultipartFiles(rr, req, 1<<20, 1<<20, []string{"photo"}, true); ok {
+		t.Fatalf("expected missing filename to fail")
+	}
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing filename, got %d", rr.Code)
+	}
+}
+
+func TestParseMultipartFiles_ParseError(t *testing.T) {
+	req, _ := makeMultipartRequest(t, map[string]string{"title": "hello"}, map[string]io.Reader{"file": bytes.NewBufferString("data")})
+	rr := httptest.NewRecorder()
+
+	if _, _, ok := ParseMultipartFiles(rr, req, 4, 1<<20, []string{"file"}, true); ok {
+		t.Fatalf("expected parse to fail when exceeding max memory")
+	}
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for parse error, got %d", rr.Code)
+	}
+}
+
 func TestParseMultipartWithFirstFile_Success(t *testing.T) {
 	req, _ := makeMultipartRequest(t, map[string]string{"title": "hello"}, map[string]io.Reader{"file": bytes.NewBufferString("data")})
 	rr := httptest.NewRecorder()
@@ -107,6 +163,18 @@ func TestParseMultipartWithFirstFile_Success(t *testing.T) {
 	file.Close()
 }
 
+func TestParseMultipartWithFirstFile_FileTooLarge(t *testing.T) {
+	req, _ := makeMultipartRequest(t, map[string]string{"title": "hello"}, map[string]io.Reader{"file": bytes.NewBufferString("data")})
+	rr := httptest.NewRecorder()
+
+	if _, _, _, _, ok := ParseMultipartWithFirstFile(rr, req, 1_000_000, 1, []string{"file"}, true); ok {
+		t.Fatalf("expected file size check to fail")
+	}
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for oversized file, got %d", rr.Code)
+	}
+}
+
 func TestParseMultipartWithFirstFile_MissingRequired(t *testing.T) {
 	req, _ := makeMultipartRequest(t, map[string]string{"title": "hello"}, nil)
 	rr := httptest.NewRecorder()
@@ -116,6 +184,18 @@ func TestParseMultipartWithFirstFile_MissingRequired(t *testing.T) {
 	}
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestParseMultipartWithFirstFile_MultipleFilesRejected(t *testing.T) {
+	req, _ := makeMultipartRequest(t, map[string]string{"title": "hello"}, map[string]io.Reader{"file": bytes.NewBufferString("one"), "file[]": bytes.NewBufferString("two")})
+	rr := httptest.NewRecorder()
+
+	if _, _, _, _, ok := ParseMultipartWithFirstFile(rr, req, 1_000_000, 0, []string{"file"}, true); ok {
+		t.Fatalf("expected multiple files to be rejected")
+	}
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for multiple files, got %d", rr.Code)
 	}
 }
 

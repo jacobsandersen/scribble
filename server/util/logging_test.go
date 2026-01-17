@@ -55,6 +55,13 @@ func TestContextWithLoggerRoundTrip(t *testing.T) {
 			t.Fatalf("expected background context without logger to return nil")
 		}
 	})
+
+	t.Run("ignores non-logger values", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), loggerKey, "not-a-logger")
+		if FromContext(ctx) != nil {
+			t.Fatalf("expected non-logger value to return nil")
+		}
+	})
 }
 
 func containsAll(s string, parts []string) bool {
