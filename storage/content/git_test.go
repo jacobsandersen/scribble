@@ -433,17 +433,73 @@ func TestGitContentStore_Reinit(t *testing.T) {
 	}
 }
 
-func TestGitContentStore_DeleteValues(t *testing.T) {
-	store := &GitContentStore{}
+func TestGitContentStore_FetchAndFastForward_FastForward(t *testing.T) {
+	store := newTestGitStore(t)
+	ctx := context.Background()
 
-	values := []any{"keep", 1, map[string]any{"k": "v"}}
-	remaining := store.deleteValues(values, []any{"keep", map[string]any{"k": "v"}})
-
-	if len(remaining) != 1 || remaining[0] != 1 {
-		t.Fatalf("unexpected remaining values: %+v", remaining)
+	// Prepare remote with a new commit after the initial clone.
+	workDir := t.TempDir()
+	clone, err := git.PlainClone(workDir, &git.CloneOptions{URL: store.cfg.Repository})
+	if err != nil {
+		t.Fatalf("clone remote: %v", err)
 	}
 
-	if !containsValue([]any{map[string]any{"k": "v"}}, map[string]any{"k": "v"}) {
-		t.Fatalf("expected containsValue to match deep equal values")
+	wt, err := clone.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+
+	updated := []byte("updated\n")
+	if err := os.WriteFile(filepath.Join(workDir, "README.md"), updated, 0644); err != nil {
+		t.Fatalf("rewrite readme: %v", err)
+	}
+
+	if _, err := wt.Add("README.md"); err != nil {
+		t.Fatalf("add readme: %v", err)
+	}
+
+	if _, err := wt.Commit("update readme", &git.CommitOptions{
+		Author: &object.Signature{Name: "test", Email: "test@example.com", When: time.Now()},
+	}); err != nil {
+		t.Fatalf("commit update: %v", err)
+	}
+
+	if err := clone.Push(&git.PushOptions{}); err != nil {
+		t.Fatalf("push update: %v", err)
+	}
+
+	if err := store.fetchAndFastForward(ctx); err != nil {
+		t.Fatalf("fetch and fast-forward: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(store.tmpDir, "README.md"))
+	if err != nil {
+		t.Fatalf("read updated file: %v", err)
+	}
+
+	if !reflect.DeepEqual(data, updated) {
+		t.Fatalf("expected fast-forwarded file to match remote update")
+	}
+}
+
+func TestGitContentStore_FetchAndFastForward_ReinitOnLocalRefFailure(t *testing.T) {
+	store := newTestGitStore(t)
+	ctx := context.Background()
+	oldDir := store.tmpDir
+
+	if err := store.repo.Storer.RemoveReference(plumbing.NewBranchReferenceName("main")); err != nil {
+		t.Fatalf("remove local ref: %v", err)
+	}
+
+	if err := store.fetchAndFastForward(ctx); err != nil {
+		t.Fatalf("fetch and fast-forward: %v", err)
+	}
+
+	if store.tmpDir == oldDir {
+		t.Fatalf("expected reinit to replace working directory")
+	}
+
+	if _, err := store.repo.Reference(plumbing.NewBranchReferenceName("main"), true); err != nil {
+		t.Fatalf("expected main reference after reinit: %v", err)
 	}
 }

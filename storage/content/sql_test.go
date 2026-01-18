@@ -2,8 +2,11 @@ package content
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
+	"net"
 	"regexp"
 	"strings"
 	"testing"
@@ -134,6 +137,66 @@ func TestSQLContentStore_UpdateDeleteUndelete_MySQLPlaceholders(t *testing.T) {
 
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestSQLContentStore_ExistsBySlug_NoRows(t *testing.T) {
+	store, mock := newSQLTestStore(t, "postgres", "posts")
+	ctx := context.Background()
+
+	mock.ExpectQuery(regexp.QuoteMeta(store.existsQuery())).
+		WithArgs("missing").
+		WillReturnRows(sqlmock.NewRows([]string{"1"}))
+
+	exists, err := store.ExistsBySlug(ctx, "missing")
+	if err != nil {
+		t.Fatalf("exists failed: %v", err)
+	}
+	if exists {
+		t.Fatalf("expected missing slug to be false")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestSQLContentStore_GetDocBySlug_NotFound(t *testing.T) {
+	store, mock := newSQLTestStore(t, "postgres", "posts")
+	ctx := context.Background()
+
+	mock.ExpectQuery(regexp.QuoteMeta(store.selectQuery())).
+		WithArgs("missing").
+		WillReturnRows(sqlmock.NewRows([]string{"doc"}))
+
+	if _, err := store.getDocBySlug(ctx, "missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestNewSQLContentStore_InvalidDriver(t *testing.T) {
+	cfg := &config.SQLContentStrategy{Driver: "invalid", DSN: "ignored"}
+	if _, err := NewSQLContentStore(cfg); err == nil {
+		t.Fatalf("expected error for invalid driver")
+	}
+}
+
+func TestNewSQLContentStore_InitSchemaFailure(t *testing.T) {
+	cfg := &config.SQLContentStrategy{Driver: "mysql", DSN: "user:pass@tcp(127.0.0.1:0)/db", PublicUrl: "https://example.test"}
+
+	store, err := NewSQLContentStore(cfg)
+	if err == nil {
+		_ = store.db.Close()
+		t.Fatalf("expected schema/init to fail for unreachable database")
+	}
+
+	var opErr *net.OpError
+	if !errors.As(err, &opErr) && !errors.Is(err, sql.ErrConnDone) {
+		t.Fatalf("unexpected error type: %v", err)
 	}
 }
 
