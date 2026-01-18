@@ -62,3 +62,36 @@ func TestExtractMediaTypeMissing(t *testing.T) {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
+
+func TestRequireValidMediaContentType(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=abc")
+	rr := httptest.NewRecorder()
+
+	if _, mediaType, ok := RequireValidMediaContentType(rr, req); !ok || mediaType != "multipart/form-data" {
+		t.Fatalf("expected multipart/form-data to be accepted")
+	}
+}
+
+func TestRequireValidMediaContentTypeRejectsInvalid(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	if _, _, ok := RequireValidMediaContentType(rr, req); ok {
+		t.Fatalf("expected invalid media content type to be rejected")
+	}
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestRequireValidMediaContentTypeAllowsGet(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+
+	method, mediaType, ok := RequireValidMediaContentType(rr, req)
+	if !ok || method != http.MethodGet || mediaType != "" {
+		t.Fatalf("expected GET requests to bypass content-type checks")
+	}
+}

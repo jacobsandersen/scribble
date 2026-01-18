@@ -14,22 +14,7 @@ COVER_FUNC="coverage.txt"
 rm -f "$COVER_PROFILE" "$COVER_FUNC"
 
 echo "==> computing package list"
-# Exclusions target integration-heavy or process wiring code that is impractical to unit test:
-# - cmd: CLI entrypoint is exercised via end-to-end usage, not unit coverage.
-# - config: config loading/validation is environment and filesystem dependent; validated via integration smoke tests.
-# - server/auth and server/middleware: token verification hits remote endpoints; we validate via integration flows instead.
-# - server/server and server (root): HTTP server wiring and lifecycle are covered by integration tests, not unit harnesses.
-# - server/handler/common: thin logging/error glue covered indirectly.
-# - server/integration: end-to-end focused; leave out of unit coverage denominator.
-# - storage/content: git-backed storage depends on external git tooling and repositories; exercised in integration/e2e.
-# - storage/media: real media backends (e.g., S3) require external services; verified through deployment tests.
-EXCLUDE_REGEX="(^github.com/indieinfra/scribble/cmd($|/))|(^github.com/indieinfra/scribble/config($|/))|(^github.com/indieinfra/scribble/server$)|/server/server|/server/handler/common|/server/integration|/server/auth|/server/middleware|/storage/content|/storage/media"
-
-PKGS=$(go list ./... | grep -Ev "$EXCLUDE_REGEX" || true)
-if [[ -z "$PKGS" ]]; then
-  echo "No packages matched after exclusions: $EXCLUDE_REGEX" >&2
-  exit 1
-fi
+PKGS=$(go list ./...)
 COVERPKG=$(echo "$PKGS" | paste -sd, -)
 
 echo "Packages under coverage:" $PKGS

@@ -46,7 +46,7 @@ func (details *TokenDetails) HasScope(scope Scope) bool {
 }
 
 func (details *TokenDetails) HasMe(me string) bool {
-	return strings.Trim(strings.ToLower(me), " ") == me
+	return strings.EqualFold(strings.TrimSpace(details.Me), strings.TrimSpace(me))
 }
 
 func VerifyAccessToken(cfg *config.Config, token string) *TokenDetails {
@@ -67,6 +67,7 @@ func VerifyAccessToken(cfg *config.Config, token string) *TokenDetails {
 	if err != nil {
 		log.Fatal(fmt.Errorf("error: failed to make http request to token endpoint: %w", err))
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		if cfg.Debug {

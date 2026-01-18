@@ -2,6 +2,7 @@ package content
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	gogitcfg "github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/object"
+	githttp "github.com/go-git/go-git/v6/plumbing/transport/http"
 
 	appconfig "github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/server/util"
@@ -113,6 +115,48 @@ func setupRemoteRepo(t *testing.T) string {
 	}
 
 	return bareDir
+}
+
+func TestBuildGitAuthPlain(t *testing.T) {
+	cfg := &appconfig.GitContentStrategy{
+		Auth: appconfig.GitContentStrategyAuth{
+			Method: "plain",
+			Plain:  &appconfig.UsernamePasswordAuth{Username: "u", Password: "p"},
+		},
+	}
+
+	auth, err := BuildGitAuth(cfg)
+	if err != nil {
+		t.Fatalf("expected plain auth to succeed: %v", err)
+	}
+
+	basic, ok := auth.(*githttp.BasicAuth)
+	if !ok {
+		t.Fatalf("expected BasicAuth, got %T", auth)
+	}
+	if basic.Username != "u" || basic.Password != "p" {
+		t.Fatalf("unexpected credentials: %+v", basic)
+	}
+}
+
+func TestBuildGitAuthInvalidMethod(t *testing.T) {
+	cfg := &appconfig.GitContentStrategy{Auth: appconfig.GitContentStrategyAuth{Method: "unknown"}}
+	if _, err := BuildGitAuth(cfg); err == nil {
+		t.Fatalf("expected error for invalid method")
+	}
+}
+
+func TestBuildGitAuthSSHError(t *testing.T) {
+	cfg := &appconfig.GitContentStrategy{
+		Auth: appconfig.GitContentStrategyAuth{
+			Method: "ssh",
+			Ssh:    &appconfig.SshKeyAuth{Username: "git", PrivateKeyFilePath: "/does/not/exist", Passphrase: ""},
+		},
+	}
+
+	if _, err := BuildGitAuth(cfg); err == nil {
+		t.Fatalf("expected ssh auth to fail for missing key file")
+	}
 }
 
 func TestGitContentStore_CreateAndGet(t *testing.T) {
@@ -267,5 +311,139 @@ func TestGitContentStore_ExistsBySlug(t *testing.T) {
 	}
 	if missing {
 		t.Fatalf("expected missing slug to be false")
+	}
+}
+
+func TestGitContentStore_ExistsBySlug_FallbackMatch(t *testing.T) {
+	store := newTestGitStore(t)
+	ctx := context.Background()
+
+	wt, err := store.repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+
+	contentPath := filepath.Join(store.cfg.Path, "other.json")
+	fullPath := filepath.Join(store.tmpDir, contentPath)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	doc := util.Mf2Document{
+		Type: []string{"h-entry"},
+		Properties: map[string][]any{
+			"slug": {"Post-Fallback"},
+		},
+	}
+
+	data, _ := json.Marshal(doc)
+	if err := os.WriteFile(fullPath, data, 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if _, err := wt.Add(contentPath); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if _, err := wt.Commit("add fallback", &git.CommitOptions{
+		Author: &object.Signature{Name: "test", Email: "test@example.com", When: time.Now()},
+	}); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	if err := store.repo.PushContext(ctx, &git.PushOptions{Auth: *store.auth}); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+
+	found, err := store.ExistsBySlug(ctx, "post-fallback")
+	if err != nil {
+		t.Fatalf("exists failed: %v", err)
+	}
+	if !found {
+		t.Fatalf("expected fallback slug match")
+	}
+}
+
+func TestGitContentStore_ExistsBySlug_FetchError(t *testing.T) {
+	store := newTestGitStore(t)
+	ctx := context.Background()
+
+	if err := os.RemoveAll(store.cfg.Repository); err != nil {
+		t.Fatalf("remove remote: %v", err)
+	}
+
+	if _, err := store.ExistsBySlug(ctx, "any"); err == nil {
+		t.Fatalf("expected error when fetch fails")
+	}
+}
+
+func TestGitContentStore_ExistsBySlug_IgnoresInvalidJSON(t *testing.T) {
+	store := newTestGitStore(t)
+	ctx := context.Background()
+
+	wt, err := store.repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+
+	invalidPath := filepath.Join(store.cfg.Path, "invalid.json")
+	fullPath := filepath.Join(store.tmpDir, invalidPath)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(fullPath, []byte("{not json"), 0644); err != nil {
+		t.Fatalf("write invalid: %v", err)
+	}
+
+	if _, err := wt.Add(invalidPath); err != nil {
+		t.Fatalf("add invalid: %v", err)
+	}
+	if _, err := wt.Commit("add invalid", &git.CommitOptions{
+		Author: &object.Signature{Name: "test", Email: "test@example.com", When: time.Now()},
+	}); err != nil {
+		t.Fatalf("commit invalid: %v", err)
+	}
+
+	if err := store.repo.PushContext(ctx, &git.PushOptions{Auth: *store.auth}); err != nil {
+		t.Fatalf("push invalid: %v", err)
+	}
+
+	exists, err := store.ExistsBySlug(ctx, "nope")
+	if err != nil {
+		t.Fatalf("exists failed: %v", err)
+	}
+	if exists {
+		t.Fatalf("expected slug to be missing even with invalid json present")
+	}
+}
+
+func TestGitContentStore_Reinit(t *testing.T) {
+	store := newTestGitStore(t)
+	oldDir := store.tmpDir
+
+	if err := store.reinit(); err != nil {
+		t.Fatalf("reinit failed: %v", err)
+	}
+
+	if store.tmpDir == "" || store.tmpDir == oldDir {
+		t.Fatalf("expected tmpDir to be replaced")
+	}
+
+	if _, err := os.Stat(oldDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("old temp dir not removed: %v", err)
+	}
+}
+
+func TestGitContentStore_DeleteValues(t *testing.T) {
+	store := &GitContentStore{}
+
+	values := []any{"keep", 1, map[string]any{"k": "v"}}
+	remaining := store.deleteValues(values, []any{"keep", map[string]any{"k": "v"}})
+
+	if len(remaining) != 1 || remaining[0] != 1 {
+		t.Fatalf("unexpected remaining values: %+v", remaining)
+	}
+
+	if !containsValue([]any{map[string]any{"k": "v"}}, map[string]any{"k": "v"}) {
+		t.Fatalf("expected containsValue to match deep equal values")
 	}
 }

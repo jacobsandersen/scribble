@@ -125,3 +125,39 @@ func TestWriteNoContentAndAccepted(t *testing.T) {
 		t.Fatalf("expected Location header")
 	}
 }
+
+func TestWriteInvalidRequest(t *testing.T) {
+	rr := httptest.NewRecorder()
+
+	WriteInvalidRequest(rr, "bad")
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+
+	var body ErrorResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	if body.Error != "invalid_request" || body.Description != "bad" {
+		t.Fatalf("unexpected body %+v", body)
+	}
+}
+
+func TestWriteInternalServerError(t *testing.T) {
+	rr := httptest.NewRecorder()
+	WriteInternalServerError(rr, "oops")
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rr.Code)
+	}
+}
+
+func TestWriteNotFound(t *testing.T) {
+	rr := httptest.NewRecorder()
+	WriteNotFound(rr, "missing")
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rr.Code)
+	}
+}

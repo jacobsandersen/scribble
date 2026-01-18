@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/url"
 	"path"
@@ -17,8 +18,18 @@ import (
 )
 
 // S3MediaStore uploads media to S3 or any compatible service (R2, Backblaze, MinIO).
+type s3Client interface {
+	BucketExists(ctx context.Context, bucketName string) (bool, error)
+	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
+}
+
+var newMinioClient = func(endpoint string, opts *minio.Options) (s3Client, error) {
+	return minio.New(endpoint, opts)
+}
+
 type S3MediaStore struct {
-	client         *minio.Client
+	client         s3Client
 	bucket         string
 	prefix         string
 	publicBase     string
@@ -57,7 +68,7 @@ func NewS3MediaStore(cfg *config.Media) (*S3MediaStore, error) {
 		lookup = minio.BucketLookupPath
 	}
 
-	client, err := minio.New(endpointHost, &minio.Options{
+	client, err := newMinioClient(endpointHost, &minio.Options{
 		Creds:        credentials.NewStaticV4(s3cfg.AccessKeyId, s3cfg.SecretKeyId, ""),
 		Secure:       secure,
 		Region:       region,
