@@ -60,9 +60,14 @@ func newSQLContentStoreWithDB(cfg *config.SQLContentStrategy, db *sql.DB) (*SQLC
 		return nil, fmt.Errorf("content sql config is nil")
 	}
 
-	table := cfg.Table
-	if table == "" {
-		table = "scribble_content"
+	prefix := "scribble"
+	if cfg.TablePrefix != nil {
+		prefix = *cfg.TablePrefix
+	}
+
+	table := "content"
+	if prefix != "" {
+		table = prefix + "_content"
 	}
 
 	placeholder, err := detectPlaceholderStyle(cfg.Driver)

@@ -46,10 +46,10 @@ type GitContentStrategyAuth struct {
 }
 
 type SQLContentStrategy struct {
-	Driver    string `mapstructure:"driver" validate:"required,oneof=postgres mysql"`
-	DSN       string `mapstructure:"dsn" validate:"required"`
-	PublicUrl string `mapstructure:"public_url" validate:"required,url"`
-	Table     string `mapstructure:"table" validate:"omitempty,identifier"`
+	Driver      string  `mapstructure:"driver" validate:"required,oneof=postgres mysql"`
+	DSN         string  `mapstructure:"dsn" validate:"required"`
+	PublicUrl   string  `mapstructure:"public_url" validate:"required,url"`
+	TablePrefix *string `mapstructure:"table_prefix" validate:"omitempty,identifier"`
 }
 
 type UsernamePasswordAuth struct {

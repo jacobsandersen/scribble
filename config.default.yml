@@ -54,7 +54,7 @@ content:
   #   driver: postgres # or mysql
   #   dsn: "postgres://user:pass@localhost:5432/scribble?sslmode=disable"
   #   public_url: "https://example.org/content/permalink"
-  #   table: "scribble_content"
+  #   table_prefix: "scribble" # optional, defaults to "scribble"; final table becomes <prefix>_content; set to "" to use plain "content"
 
 media:
   strategy: s3

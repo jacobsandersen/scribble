@@ -18,7 +18,7 @@ import (
 )
 
 func TestSQLContentStore_CreateAndGet_PostgresPlaceholders(t *testing.T) {
-	store, mock := newSQLTestStore(t, "postgres", "posts")
+	store, mock := newSQLTestStore(t, "postgres", nil)
 	ctx := context.Background()
 
 	doc := util.Mf2Document{Type: []string{"h-entry"}, Properties: map[string][]any{"slug": []any{"post-1"}}}
@@ -64,7 +64,7 @@ func TestSQLContentStore_CreateAndGet_PostgresPlaceholders(t *testing.T) {
 }
 
 func TestSQLContentStore_UpdateDeleteUndelete_MySQLPlaceholders(t *testing.T) {
-	store, mock := newSQLTestStore(t, "mysql", "entries")
+	store, mock := newSQLTestStore(t, "mysql", nil)
 	ctx := context.Background()
 
 	existing := util.Mf2Document{Type: []string{"h-entry"}, Properties: map[string][]any{"slug": []any{"entry-1"}, "name": []any{"old"}}}
@@ -141,7 +141,7 @@ func TestSQLContentStore_UpdateDeleteUndelete_MySQLPlaceholders(t *testing.T) {
 }
 
 func TestSQLContentStore_ExistsBySlug_NoRows(t *testing.T) {
-	store, mock := newSQLTestStore(t, "postgres", "posts")
+	store, mock := newSQLTestStore(t, "postgres", nil)
 	ctx := context.Background()
 
 	mock.ExpectQuery(regexp.QuoteMeta(store.existsQuery())).
@@ -162,7 +162,7 @@ func TestSQLContentStore_ExistsBySlug_NoRows(t *testing.T) {
 }
 
 func TestSQLContentStore_GetDocBySlug_NotFound(t *testing.T) {
-	store, mock := newSQLTestStore(t, "postgres", "posts")
+	store, mock := newSQLTestStore(t, "postgres", nil)
 	ctx := context.Background()
 
 	mock.ExpectQuery(regexp.QuoteMeta(store.selectQuery())).
@@ -185,6 +185,44 @@ func TestNewSQLContentStore_InvalidDriver(t *testing.T) {
 	}
 }
 
+func TestNewSQLContentStore_DefaultTablePrefix(t *testing.T) {
+	cfg := &config.SQLContentStrategy{Driver: "postgres", DSN: "ignored", PublicUrl: "https://example.test"}
+	store, err := newSQLContentStoreWithDB(cfg, nil)
+	if err != nil {
+		t.Fatalf("store setup failed: %v", err)
+	}
+
+	if store.table != "scribble_content" {
+		t.Fatalf("expected default table name scribble_content, got %s", store.table)
+	}
+}
+
+func TestNewSQLContentStore_CustomTablePrefix(t *testing.T) {
+	shared := "shared"
+	cfg := &config.SQLContentStrategy{Driver: "postgres", DSN: "ignored", PublicUrl: "https://example.test", TablePrefix: &shared}
+	store, err := newSQLContentStoreWithDB(cfg, nil)
+	if err != nil {
+		t.Fatalf("store setup failed: %v", err)
+	}
+
+	if store.table != "shared_content" {
+		t.Fatalf("expected table to use prefix: %s", store.table)
+	}
+}
+
+func TestNewSQLContentStore_EmptyTablePrefix(t *testing.T) {
+	empty := ""
+	cfg := &config.SQLContentStrategy{Driver: "postgres", DSN: "ignored", PublicUrl: "https://example.test", TablePrefix: &empty}
+	store, err := newSQLContentStoreWithDB(cfg, nil)
+	if err != nil {
+		t.Fatalf("store setup failed: %v", err)
+	}
+
+	if store.table != "content" {
+		t.Fatalf("expected empty prefix to yield content, got %s", store.table)
+	}
+}
+
 func TestNewSQLContentStore_InitSchemaFailure(t *testing.T) {
 	cfg := &config.SQLContentStrategy{Driver: "mysql", DSN: "user:pass@tcp(127.0.0.1:0)/db", PublicUrl: "https://example.test"}
 
@@ -200,13 +238,13 @@ func TestNewSQLContentStore_InitSchemaFailure(t *testing.T) {
 	}
 }
 
-func newSQLTestStore(t *testing.T, driver string, table string) (*SQLContentStore, sqlmock.Sqlmock) {
+func newSQLTestStore(t *testing.T, driver string, prefix *string) (*SQLContentStore, sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
 	}
 
-	cfg := &config.SQLContentStrategy{Driver: driver, DSN: "ignored", PublicUrl: "https://example.test", Table: table}
+	cfg := &config.SQLContentStrategy{Driver: driver, DSN: "ignored", PublicUrl: "https://example.test", TablePrefix: prefix}
 	store, err := newSQLContentStoreWithDB(cfg, db)
 	if err != nil {
 		t.Fatalf("store setup: %v", err)
