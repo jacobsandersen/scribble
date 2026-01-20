@@ -125,7 +125,7 @@ func TestBuildGitAuthPlain(t *testing.T) {
 		},
 	}
 
-	auth, err := BuildGitAuth(cfg)
+	auth, err := buildGitAuth(cfg)
 	if err != nil {
 		t.Fatalf("expected plain auth to succeed: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestBuildGitAuthPlain(t *testing.T) {
 
 func TestBuildGitAuthInvalidMethod(t *testing.T) {
 	cfg := &appconfig.GitContentStrategy{Auth: appconfig.GitContentStrategyAuth{Method: "unknown"}}
-	if _, err := BuildGitAuth(cfg); err == nil {
+	if _, err := buildGitAuth(cfg); err == nil {
 		t.Fatalf("expected error for invalid method")
 	}
 }
@@ -154,7 +154,7 @@ func TestBuildGitAuthSSHError(t *testing.T) {
 		},
 	}
 
-	if _, err := BuildGitAuth(cfg); err == nil {
+	if _, err := buildGitAuth(cfg); err == nil {
 		t.Fatalf("expected ssh auth to fail for missing key file")
 	}
 }
