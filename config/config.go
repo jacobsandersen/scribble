@@ -11,6 +11,7 @@ func (c *Config) Validate() error {
 	validate := validator.New(validator.WithRequiredStructEnabled())
 	validate.RegisterValidation("abspath", ValidateAbsPath)
 	validate.RegisterValidation("localpath", ValidateLocalpath)
+	validate.RegisterValidation("identifier", ValidateIdentifier)
 
 	if err := validate.Struct(c); err != nil {
 		return err

@@ -15,11 +15,11 @@ rm -f "$COVER_PROFILE" "$COVER_FUNC"
 
 echo "==> computing package list"
 PKGS=$(go list ./...)
-COVERPKG=$(echo "$PKGS" | paste -sd, -)
 
 echo "Packages under coverage:" $PKGS
 echo "==> go test with coverage"
-go test $PKGS -coverpkg="$COVERPKG" -coverprofile="$COVER_PROFILE" -covermode=atomic
+# Use per-package coverage (no cross-package -coverpkg) to match `go test ./... -coverprofile` output.
+go test ./... -coverprofile="$COVER_PROFILE" -covermode=atomic
 
 echo "==> coverage summary"
 go tool cover -func="$COVER_PROFILE" | tee "$COVER_FUNC"

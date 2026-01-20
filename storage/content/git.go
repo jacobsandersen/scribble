@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -278,7 +277,7 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 
 	if deletes, ok := deletions.(map[string][]any); ok {
 		for key, valuesToRemove := range deletes {
-			remaining := cs.deleteValues(doc.Properties[key], valuesToRemove)
+			remaining := deleteValues(doc.Properties[key], valuesToRemove)
 			if len(remaining) == 0 {
 				delete(doc.Properties, key)
 			} else {
@@ -482,31 +481,6 @@ func (cs *GitContentStore) setDeletedStatus(ctx context.Context, url string, del
 	}
 
 	return url, nil
-}
-
-func (cs *GitContentStore) deleteValues(values []any, toRemove []any) []any {
-	if len(values) == 0 || len(toRemove) == 0 {
-		return values
-	}
-
-	var remaining []any
-	for _, v := range values {
-		if !containsValue(toRemove, v) {
-			remaining = append(remaining, v)
-		}
-	}
-
-	return remaining
-}
-
-func containsValue(list []any, value any) bool {
-	for _, candidate := range list {
-		if reflect.DeepEqual(candidate, value) {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (cs *GitContentStore) ExistsBySlug(ctx context.Context, slug string) (bool, error) {

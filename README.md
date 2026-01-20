@@ -20,5 +20,5 @@ Planned/possible backends
 - SFTP server
 - HTTP forwarding
 - S3-compatible storage ✅
-- Database
+- Database (PostgreSQL/MySQL) ✅
 - Others as they emerge

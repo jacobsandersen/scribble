@@ -35,7 +35,7 @@ func TestTokenDetailsHasMe(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.d.HasMe(tc.me); got != tc.ok {
-				t.Fatalf("HasMe() = %v, want %v", got, tc.ok)
+				t.Fatalf("HasMe() = %v, want %v (details=%q, me=%q)", got, tc.ok, tc.d.Me, tc.me)
 			}
 		})
 	}

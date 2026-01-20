@@ -27,8 +27,9 @@ type Micropub struct {
 }
 
 type Content struct {
-	Strategy string              `mapstructure:"strategy" validate:"required,oneof=git"`
+	Strategy string              `mapstructure:"strategy" validate:"required,oneof=git sql"`
 	Git      *GitContentStrategy `mapstructure:"git" validate:"required_if=Strategy git"`
+	SQL      *SQLContentStrategy `mapstructure:"sql" validate:"required_if=Strategy sql"`
 }
 
 type GitContentStrategy struct {
@@ -42,6 +43,13 @@ type GitContentStrategyAuth struct {
 	Method string                `mapstructure:"method" validate:"required,oneof=plain ssh"`
 	Plain  *UsernamePasswordAuth `mapstructure:"plain" validate:"required_if=Method plain"`
 	Ssh    *SshKeyAuth           `mapstructure:"ssh" validate:"required_if=Method ssh"`
+}
+
+type SQLContentStrategy struct {
+	Driver      string  `mapstructure:"driver" validate:"required,oneof=postgres mysql"`
+	DSN         string  `mapstructure:"dsn" validate:"required"`
+	PublicUrl   string  `mapstructure:"public_url" validate:"required,url"`
+	TablePrefix *string `mapstructure:"table_prefix" validate:"omitempty,identifier"`
 }
 
 type UsernamePasswordAuth struct {

@@ -44,4 +44,8 @@ func init() {
 	Register("git", func(cfg *config.Content) (content.ContentStore, error) {
 		return content.NewGitContentStore(cfg.Git)
 	})
+
+	Register("sql", func(cfg *config.Content) (content.ContentStore, error) {
+		return content.NewSQLContentStore(cfg.SQL)
+	})
 }

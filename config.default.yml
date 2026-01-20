@@ -48,6 +48,14 @@ content:
         private_key_file: ""
         passphrase: ""
 
+  # Use the SQL backend instead of git by switching the strategy and configuring the database connection.
+  # strategy: sql
+  # sql:
+  #   driver: postgres # or mysql
+  #   dsn: "postgres://user:pass@localhost:5432/scribble?sslmode=disable"
+  #   public_url: "https://example.org/content/permalink"
+  #   table_prefix: "scribble" # optional, defaults to "scribble"; final table becomes <prefix>_content; set to "" to use plain "content"
+
 media:
   strategy: s3
   s3:
