@@ -4,3 +4,5 @@ config.yml
 coverage.out
 coverage.txt
 devdb
+.github
+!.github/workflows
