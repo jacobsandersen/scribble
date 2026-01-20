@@ -21,38 +21,44 @@ func GenerateSlug(doc Mf2Document) string {
 		contentText = extractTextFromProperty(content)
 	}
 
-	// Generate slug from name
+	// Generate slug from name, limiting to 5 words
 	var generatedSlug string
 	if nameText != "" {
-		generatedSlug = slug.Make(nameText)
+		nameWords := strings.Fields(nameText)
+		if len(nameWords) > 5 {
+			nameWords = nameWords[:5]
+		}
+		generatedSlug = slug.Make(strings.Join(nameWords, " "))
 	}
 
-	// If slug is less than 5 words and we have content, combine with content
+	// If slug is less than 5 words and we have content, combine with content up to 5 words total
 	if len(strings.Fields(nameText)) < 5 && contentText != "" {
-		words := strings.Fields(contentText)
-		// Add words from content until we reach ~5 words total
+		contentWords := strings.Fields(contentText)
 		var combined []string
 		if nameText != "" {
-			combined = append(combined, nameText)
+			combined = strings.Fields(nameText)
 		}
 
-		for _, word := range words {
-			combined = append(combined, word)
+		// Add words from content until we reach 5 words max
+		for _, word := range contentWords {
 			if len(combined) >= 5 {
-				generatedSlug = slug.Make(strings.Join(combined, " "))
 				break
 			}
+			combined = append(combined, word)
 		}
 
-		// If we added words but still have combined text, use what we have
-		if generatedSlug == "" && len(combined) > 0 {
+		if len(combined) > 0 {
 			generatedSlug = slug.Make(strings.Join(combined, " "))
 		}
 	}
 
-	// If still no slug, try content alone
+	// If still no slug, try content alone (limited to 5 words)
 	if generatedSlug == "" && contentText != "" {
-		generatedSlug = slug.Make(contentText)
+		contentWords := strings.Fields(contentText)
+		if len(contentWords) > 5 {
+			contentWords = contentWords[:5]
+		}
+		generatedSlug = slug.Make(strings.Join(contentWords, " "))
 	}
 
 	return generatedSlug

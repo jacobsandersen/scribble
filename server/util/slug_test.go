@@ -31,6 +31,24 @@ func TestGenerateSlug(t *testing.T) {
 			t.Fatalf("expected empty slug when no name/content, got %q", slug)
 		}
 	})
+
+	t.Run("limits to 5 words from name", func(t *testing.T) {
+		doc := Mf2Document{Properties: map[string][]any{"name": {"One Two Three Four Five Six Seven Eight"}}}
+		slug := GenerateSlug(doc)
+		expected := "one-two-three-four-five"
+		if slug != expected {
+			t.Fatalf("expected 5-word slug %q, got %q", expected, slug)
+		}
+	})
+
+	t.Run("limits to 5 words from content", func(t *testing.T) {
+		doc := Mf2Document{Properties: map[string][]any{"content": {"One Two Three Four Five Six Seven Eight"}}}
+		slug := GenerateSlug(doc)
+		expected := "one-two-three-four-five"
+		if slug != expected {
+			t.Fatalf("expected 5-word slug %q, got %q", expected, slug)
+		}
+	})
 }
 
 func TestSlugFromURL(t *testing.T) {

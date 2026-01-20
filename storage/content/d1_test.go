@@ -14,7 +14,7 @@ import (
 
 type d1Expectation struct {
 	contains string
-	result   d1Result
+	rows     []map[string]any
 	status   int
 	success  bool
 }
@@ -24,11 +24,19 @@ func newD1TestStore(t *testing.T, expectations []d1Expectation) *D1ContentStore 
 
 	idx := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
 		}
 
-		var req d1Request
+		if !strings.HasSuffix(r.URL.Path, "/query") {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		var req struct {
+			SQL    string   `json:"sql"`
+			Params []string `json:"params"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}
@@ -50,11 +58,19 @@ func newD1TestStore(t *testing.T, expectations []d1Expectation) *D1ContentStore 
 		}
 
 		w.WriteHeader(status)
-		resp := d1Response{Success: exp.success}
-		if resp.Success {
-			resp.Result = []d1Result{exp.result}
-		} else {
-			resp.Errors = []d1APIError{{Message: "fail"}}
+		if !exp.success {
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "errors": []map[string]any{{"message": "fail"}}})
+			return
+		}
+
+		result := map[string]any{"success": true}
+		if exp.rows != nil {
+			result["results"] = exp.rows
+		}
+
+		resp := map[string]any{
+			"success": true,
+			"result":  []map[string]any{result},
 		}
 
 		_ = json.NewEncoder(w).Encode(resp)
@@ -86,9 +102,9 @@ func TestD1ContentStore_CreateAndGet(t *testing.T) {
 	}
 
 	store := newD1TestStore(t, []d1Expectation{
-		{contains: "CREATE TABLE", result: d1Result{Success: true}, success: true},
-		{contains: "INSERT INTO", result: d1Result{Success: true}, success: true},
-		{contains: "SELECT doc", result: d1Result{Success: true, Results: []map[string]any{{"doc": string(payload)}}}, success: true},
+		{contains: "CREATE TABLE", success: true},
+		{contains: "INSERT INTO", success: true},
+		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(payload)}}},
 	})
 
 	ctx := context.Background()
@@ -124,14 +140,14 @@ func TestD1ContentStore_UpdateDeleteUndeleteExists(t *testing.T) {
 	deletedPayload, _ := json.Marshal(deletedDoc)
 
 	store := newD1TestStore(t, []d1Expectation{
-		{contains: "CREATE TABLE", result: d1Result{Success: true}, success: true},
-		{contains: "SELECT doc", result: d1Result{Success: true, Results: []map[string]any{{"doc": string(existingPayload)}}}, success: true},
-		{contains: "UPDATE", result: d1Result{Success: true}, success: true},
-		{contains: "SELECT doc", result: d1Result{Success: true, Results: []map[string]any{{"doc": string(updatedPayload)}}}, success: true},
-		{contains: "UPDATE", result: d1Result{Success: true}, success: true},
-		{contains: "SELECT doc", result: d1Result{Success: true, Results: []map[string]any{{"doc": string(deletedPayload)}}}, success: true},
-		{contains: "UPDATE", result: d1Result{Success: true}, success: true},
-		{contains: "SELECT 1", result: d1Result{Success: true, Results: []map[string]any{{"1": 1}}}, success: true},
+		{contains: "CREATE TABLE", success: true},
+		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}},
+		{contains: "UPDATE", success: true},
+		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(updatedPayload)}}},
+		{contains: "UPDATE", success: true},
+		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(deletedPayload)}}},
+		{contains: "UPDATE", success: true},
+		{contains: "SELECT 1", success: true, rows: []map[string]any{{"1": 1}}},
 	})
 
 	ctx := context.Background()
@@ -159,8 +175,8 @@ func TestD1ContentStore_UpdateDeleteUndeleteExists(t *testing.T) {
 
 func TestD1ContentStore_Get_NotFound(t *testing.T) {
 	store := newD1TestStore(t, []d1Expectation{
-		{contains: "CREATE TABLE", result: d1Result{Success: true}, success: true},
-		{contains: "SELECT doc", result: d1Result{Success: true, Results: []map[string]any{}}, success: true},
+		{contains: "CREATE TABLE", success: true},
+		{contains: "SELECT doc", success: true, rows: []map[string]any{}},
 	})
 
 	if _, err := store.Get(context.Background(), "https://example.test/missing"); err == nil {
@@ -172,7 +188,9 @@ func TestD1ContentStore_Get_NotFound(t *testing.T) {
 
 func TestD1ContentStore_APIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(d1Response{Success: false, Errors: []d1APIError{{Code: 100, Message: "bad"}}})
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "errors": []map[string]any{{"code": 100, "message": "bad"}}})
 	}))
 	t.Cleanup(srv.Close)
 
