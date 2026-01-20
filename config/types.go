@@ -27,9 +27,10 @@ type Micropub struct {
 }
 
 type Content struct {
-	Strategy string              `mapstructure:"strategy" validate:"required,oneof=git sql"`
+	Strategy string              `mapstructure:"strategy" validate:"required,oneof=git sql d1"`
 	Git      *GitContentStrategy `mapstructure:"git" validate:"required_if=Strategy git"`
 	SQL      *SQLContentStrategy `mapstructure:"sql" validate:"required_if=Strategy sql"`
+	D1       *D1ContentStrategy  `mapstructure:"d1" validate:"required_if=Strategy d1"`
 }
 
 type GitContentStrategy struct {
@@ -50,6 +51,15 @@ type SQLContentStrategy struct {
 	DSN         string  `mapstructure:"dsn" validate:"required"`
 	PublicUrl   string  `mapstructure:"public_url" validate:"required,url"`
 	TablePrefix *string `mapstructure:"table_prefix" validate:"omitempty,identifier"`
+}
+
+type D1ContentStrategy struct {
+	AccountID   string  `mapstructure:"account_id" validate:"required"`
+	DatabaseID  string  `mapstructure:"database_id" validate:"required"`
+	APIToken    string  `mapstructure:"api_token" validate:"required"`
+	PublicUrl   string  `mapstructure:"public_url" validate:"required,url"`
+	TablePrefix *string `mapstructure:"table_prefix" validate:"omitempty,identifier"`
+	Endpoint    string  `mapstructure:"endpoint" validate:"omitempty,url"`
 }
 
 type UsernamePasswordAuth struct {

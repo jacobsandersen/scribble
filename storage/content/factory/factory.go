@@ -48,4 +48,8 @@ func init() {
 	Register("sql", func(cfg *config.Content) (content.ContentStore, error) {
 		return content.NewSQLContentStore(cfg.SQL)
 	})
+
+	Register("d1", func(cfg *config.Content) (content.ContentStore, error) {
+		return content.NewD1ContentStore(cfg.D1)
+	})
 }

@@ -56,6 +56,16 @@ content:
   #   public_url: "https://example.org/content/permalink"
   #   table_prefix: "scribble" # optional, defaults to "scribble"; final table becomes <prefix>_content; set to "" to use plain "content"
 
+  # Use the Cloudflare D1 backend by switching the strategy and configuring API access.
+  # strategy: d1
+  # d1:
+  #   account_id: "your-account-id"
+  #   database_id: "your-d1-database-id"
+  #   api_token: "your-api-or-user-token"
+  #   public_url: "https://example.org/content/permalink"
+  #   table_prefix: "scribble" # optional, defaults to "scribble"; final table becomes <prefix>_content; set to "" to use plain "content"
+  #   endpoint: "https://api.cloudflare.com/client/v4" # optional override for testing/self-hosted proxies
+
 media:
   strategy: s3
   s3:

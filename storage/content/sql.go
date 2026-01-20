@@ -85,7 +85,7 @@ func newSQLContentStoreWithDB(cfg *config.SQLContentStrategy, db *sql.DB) (*SQLC
 		db:          db,
 		table:       table,
 		placeholder: placeholder,
-		publicURL:   strings.TrimSuffix(cfg.PublicUrl, "/"),
+		publicURL:   normalizeBaseURL(cfg.PublicUrl),
 	}, nil
 }
 
@@ -134,7 +134,7 @@ func (cs *SQLContentStore) Create(ctx context.Context, doc util.Mf2Document) (st
 		return "", false, err
 	}
 
-	url := cs.publicURL + "/" + slug
+	url := cs.publicURL + slug
 
 	payload, err := json.Marshal(doc)
 	if err != nil {
@@ -146,7 +146,7 @@ func (cs *SQLContentStore) Create(ctx context.Context, doc util.Mf2Document) (st
 		return "", false, err
 	}
 
-	return url, true, nil
+	return cs.publicURL + slug, true, nil
 }
 
 func (cs *SQLContentStore) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
@@ -168,7 +168,7 @@ func (cs *SQLContentStore) Update(ctx context.Context, url string, replacements 
 	}
 
 	_, err = cs.db.ExecContext(ctx, cs.updateQuery(), string(payload), deletedFlag(doc), slug)
-	return url, err
+	return cs.publicURL + slug, err
 }
 
 func (cs *SQLContentStore) Delete(ctx context.Context, url string) error {
@@ -177,8 +177,8 @@ func (cs *SQLContentStore) Delete(ctx context.Context, url string) error {
 }
 
 func (cs *SQLContentStore) Undelete(ctx context.Context, url string) (string, bool, error) {
-	_, err := cs.setDeletedStatus(ctx, url, false)
-	return url, false, err
+	newURL, err := cs.setDeletedStatus(ctx, url, false)
+	return newURL, false, err
 }
 
 func (cs *SQLContentStore) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
@@ -221,10 +221,7 @@ func (cs *SQLContentStore) setDeletedStatus(ctx context.Context, url string, del
 		return url, err
 	}
 
-	if doc.Properties == nil {
-		doc.Properties = make(map[string][]any)
-	}
-	doc.Properties["deleted"] = []any{deleted}
+	applyMutations(doc, map[string][]any{"deleted": []any{deleted}}, nil, nil)
 
 	payload, err := json.Marshal(doc)
 	if err != nil {
@@ -232,7 +229,7 @@ func (cs *SQLContentStore) setDeletedStatus(ctx context.Context, url string, del
 	}
 
 	_, err = cs.db.ExecContext(ctx, cs.updateQuery(), string(payload), deleted, slug)
-	return url, err
+	return cs.publicURL + slug, err
 }
 
 func (cs *SQLContentStore) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
@@ -248,20 +245,6 @@ func (cs *SQLContentStore) ExistsBySlug(ctx context.Context, slug string) (bool,
 	}
 
 	return true, nil
-}
-
-func extractSlug(doc util.Mf2Document) (string, error) {
-	slugProp, ok := doc.Properties["slug"]
-	if !ok || len(slugProp) == 0 {
-		return "", fmt.Errorf("document must have a slug property")
-	}
-
-	slug, ok := slugProp[0].(string)
-	if !ok || slug == "" {
-		return "", fmt.Errorf("slug property must be a non-empty string")
-	}
-
-	return slug, nil
 }
 
 func (cs *SQLContentStore) insertQuery() string {
@@ -299,55 +282,4 @@ func (cs *SQLContentStore) placeholderFor(index int) string {
 	}
 
 	return "?"
-}
-
-func applyMutations(doc *util.Mf2Document, replacements map[string][]any, additions map[string][]any, deletions any) {
-	if doc.Properties == nil {
-		doc.Properties = make(map[string][]any)
-	}
-
-	for key, values := range replacements {
-		doc.Properties[key] = values
-	}
-
-	for key, values := range additions {
-		doc.Properties[key] = append(doc.Properties[key], values...)
-	}
-
-	switch deletes := deletions.(type) {
-	case map[string][]any:
-		for key, valuesToRemove := range deletes {
-			remaining := deleteValues(doc.Properties[key], valuesToRemove)
-			if len(remaining) == 0 {
-				delete(doc.Properties, key)
-			} else {
-				doc.Properties[key] = remaining
-			}
-		}
-	case []string:
-		for _, key := range deletes {
-			delete(doc.Properties, key)
-		}
-	}
-}
-
-func deletedFlag(doc *util.Mf2Document) bool {
-	if doc == nil || doc.Properties == nil {
-		return false
-	}
-
-	values := doc.Properties["deleted"]
-	if len(values) == 0 {
-		return false
-	}
-
-	if b, ok := values[0].(bool); ok {
-		return b
-	}
-
-	if s, ok := values[0].(string); ok {
-		return strings.EqualFold(s, "true")
-	}
-
-	return false
 }

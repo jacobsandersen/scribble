@@ -23,11 +23,12 @@ import (
 )
 
 type GitContentStore struct {
-	cfg    *config.GitContentStrategy
-	auth   *transport.AuthMethod
-	repo   *git.Repository
-	tmpDir string
-	mu     sync.Mutex
+	cfg       *config.GitContentStrategy
+	auth      *transport.AuthMethod
+	repo      *git.Repository
+	tmpDir    string
+	mu        sync.Mutex
+	publicURL string
 }
 
 var NoErrFound error = errors.New("found")
@@ -51,7 +52,7 @@ func freshClone(cfg *config.GitContentStrategy, auth transport.AuthMethod) (stri
 }
 
 func NewGitContentStore(cfg *config.GitContentStrategy) (*GitContentStore, error) {
-	auth, err := BuildGitAuth(cfg)
+	auth, err := buildGitAuth(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -62,14 +63,15 @@ func NewGitContentStore(cfg *config.GitContentStrategy) (*GitContentStore, error
 	}
 
 	return &GitContentStore{
-		cfg:    cfg,
-		auth:   &auth,
-		repo:   repo,
-		tmpDir: tmpDir,
+		cfg:       cfg,
+		auth:      &auth,
+		repo:      repo,
+		tmpDir:    tmpDir,
+		publicURL: normalizeBaseURL(cfg.PublicUrl),
 	}, nil
 }
 
-func BuildGitAuth(cfg *config.GitContentStrategy) (transport.AuthMethod, error) {
+func buildGitAuth(cfg *config.GitContentStrategy) (transport.AuthMethod, error) {
 	switch cfg.Auth.Method {
 	case "plain":
 		return &http.BasicAuth{
@@ -239,7 +241,7 @@ func (cs *GitContentStore) Create(ctx context.Context, doc util.Mf2Document) (st
 		return "", false, fmt.Errorf("failed to push local: %w", err)
 	}
 
-	return cs.cfg.PublicUrl + "/" + slug, false, nil
+	return cs.publicURL + slug, false, nil
 }
 
 func (cs *GitContentStore) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
@@ -263,32 +265,7 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 		return url, ErrNotFound
 	}
 
-	if doc.Properties == nil {
-		doc.Properties = make(map[string][]any)
-	}
-
-	for key, values := range replacements {
-		doc.Properties[key] = values
-	}
-
-	for key, values := range additions {
-		doc.Properties[key] = append(doc.Properties[key], values...)
-	}
-
-	if deletes, ok := deletions.(map[string][]any); ok {
-		for key, valuesToRemove := range deletes {
-			remaining := deleteValues(doc.Properties[key], valuesToRemove)
-			if len(remaining) == 0 {
-				delete(doc.Properties, key)
-			} else {
-				doc.Properties[key] = remaining
-			}
-		}
-	} else if deletes, ok := deletions.([]string); ok {
-		for _, key := range deletes {
-			delete(doc.Properties, key)
-		}
-	}
+	applyMutations(doc, replacements, additions, deletions)
 
 	jsonBytes, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
@@ -327,7 +304,7 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 		return url, fmt.Errorf("failed to push local: %w", err)
 	}
 
-	return url, nil
+	return cs.publicURL + slug, nil
 }
 
 func (cs *GitContentStore) Delete(ctx context.Context, url string) error {
@@ -336,8 +313,8 @@ func (cs *GitContentStore) Delete(ctx context.Context, url string) error {
 }
 
 func (cs *GitContentStore) Undelete(ctx context.Context, url string) (string, bool, error) {
-	_, err := cs.setDeletedStatus(ctx, url, false)
-	return url, false, err
+	newURL, err := cs.setDeletedStatus(ctx, url, false)
+	return newURL, false, err
 }
 
 func (cs *GitContentStore) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
@@ -428,15 +405,7 @@ func (cs *GitContentStore) setDeletedStatus(ctx context.Context, url string, del
 		return url, ErrNotFound
 	}
 
-	if doc.Properties == nil {
-		doc.Properties = make(map[string][]any)
-	}
-
-	if deleted {
-		doc.Properties["deleted"] = []any{true}
-	} else {
-		doc.Properties["deleted"] = []any{false}
-	}
+	applyMutations(doc, map[string][]any{"deleted": []any{deleted}}, nil, nil)
 
 	jsonBytes, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
@@ -480,7 +449,7 @@ func (cs *GitContentStore) setDeletedStatus(ctx context.Context, url string, del
 		return url, fmt.Errorf("failed to push local: %w", err)
 	}
 
-	return url, nil
+	return cs.publicURL + slug, nil
 }
 
 func (cs *GitContentStore) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
