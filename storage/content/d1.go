@@ -62,7 +62,7 @@ func NewD1ContentStore(cfg *config.D1ContentStrategy) (*D1ContentStore, error) {
 		client:    &http.Client{Timeout: 15 * time.Second},
 		endpoint:  endpoint,
 		table:     table,
-		publicURL: strings.TrimSuffix(cfg.PublicUrl, "/"),
+		publicURL: normalizeBaseURL(cfg.PublicUrl),
 	}
 
 	if err := store.initSchema(context.Background()); err != nil {
@@ -91,7 +91,7 @@ func newD1ContentStoreWithClient(cfg *config.D1ContentStrategy, client *http.Cli
 		client:    c,
 		endpoint:  endpoint,
 		table:     table,
-		publicURL: strings.TrimSuffix(cfg.PublicUrl, "/"),
+		publicURL: normalizeBaseURL(cfg.PublicUrl),
 	}
 
 	if err := store.initSchema(context.Background()); err != nil {
@@ -163,7 +163,7 @@ func (cs *D1ContentStore) Create(ctx context.Context, doc util.Mf2Document) (str
 		return "", false, err
 	}
 
-	url := cs.publicURL + "/" + slug
+	url := cs.publicURL + slug
 
 	payload, err := json.Marshal(doc)
 	if err != nil {
@@ -199,7 +199,7 @@ func (cs *D1ContentStore) Update(ctx context.Context, url string, replacements m
 		return url, err
 	}
 
-	return url, nil
+	return cs.publicURL + slug, nil
 }
 
 func (cs *D1ContentStore) Delete(ctx context.Context, url string) error {
@@ -208,8 +208,8 @@ func (cs *D1ContentStore) Delete(ctx context.Context, url string) error {
 }
 
 func (cs *D1ContentStore) Undelete(ctx context.Context, url string) (string, bool, error) {
-	_, err := cs.setDeletedStatus(ctx, url, false)
-	return url, false, err
+	newURL, err := cs.setDeletedStatus(ctx, url, false)
+	return newURL, false, err
 }
 
 func (cs *D1ContentStore) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
@@ -269,7 +269,7 @@ func (cs *D1ContentStore) setDeletedStatus(ctx context.Context, url string, dele
 		return url, err
 	}
 
-	return url, nil
+	return cs.publicURL + slug, nil
 }
 
 func (cs *D1ContentStore) ExistsBySlug(ctx context.Context, slug string) (bool, error) {

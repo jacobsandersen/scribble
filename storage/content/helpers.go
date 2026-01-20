@@ -34,6 +34,12 @@ func containsValue(list []any, value any) bool {
 	return false
 }
 
+func normalizeBaseURL(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	trimmed = strings.TrimSuffix(trimmed, "/")
+	return trimmed + "/"
+}
+
 func extractSlug(doc util.Mf2Document) (string, error) {
 	slugProp, ok := doc.Properties["slug"]
 	if !ok || len(slugProp) == 0 {
