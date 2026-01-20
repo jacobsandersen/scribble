@@ -46,8 +46,8 @@ func (details *TokenDetails) HasScope(scope Scope) bool {
 }
 
 func (details *TokenDetails) HasMe(me string) bool {
-	me = strings.TrimSpace(strings.TrimSuffix(me, "/") + "/")
-	meDetails := strings.TrimSpace(strings.TrimSuffix(details.Me, "/") + "/")
+	me = strings.TrimSuffix(strings.TrimSpace(me), "/") + "/"
+	meDetails := strings.TrimSuffix(strings.TrimSpace(details.Me), "/") + "/"
 	return strings.EqualFold(me, meDetails)
 }
 
