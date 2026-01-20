@@ -46,7 +46,9 @@ func (details *TokenDetails) HasScope(scope Scope) bool {
 }
 
 func (details *TokenDetails) HasMe(me string) bool {
-	return strings.EqualFold(strings.TrimSpace(details.Me), strings.TrimSpace(me))
+	me = strings.TrimSpace(strings.TrimSuffix(me, "/") + "/")
+	meDetails := strings.TrimSpace(strings.TrimSuffix(details.Me, "/") + "/")
+	return strings.EqualFold(me, meDetails)
 }
 
 func VerifyAccessToken(cfg *config.Config, token string) *TokenDetails {

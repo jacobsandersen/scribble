@@ -37,7 +37,12 @@ func NewSQLContentStore(cfg *config.SQLContentStrategy) (*SQLContentStore, error
 		return nil, err
 	}
 
-	db, err := sql.Open(cfg.Driver, cfg.DSN)
+	driverName, err := resolveSQLDriverName(cfg.Driver)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := sql.Open(driverName, cfg.DSN)
 	if err != nil {
 		return nil, err
 	}
@@ -85,13 +90,26 @@ func newSQLContentStoreWithDB(cfg *config.SQLContentStrategy, db *sql.DB) (*SQLC
 }
 
 func detectPlaceholderStyle(driver string) (placeholderStyle, error) {
-	switch strings.ToLower(driver) {
-	case "postgres", "postgresql", "pgx", "pgx/v5", "pgx/v5/stdlib":
+	driverName, err := resolveSQLDriverName(driver)
+	if err != nil {
+		return placeholderQuestion, err
+	}
+
+	if driverName == "pgx" {
 		return placeholderDollar, nil
+	}
+
+	return placeholderQuestion, nil
+}
+
+func resolveSQLDriverName(driver string) (string, error) {
+	switch strings.ToLower(driver) {
+	case "postgres":
+		return "pgx", nil
 	case "mysql":
-		return placeholderQuestion, nil
+		return "mysql", nil
 	default:
-		return placeholderQuestion, fmt.Errorf("unsupported sql driver %q", driver)
+		return "", fmt.Errorf("unsupported sql driver %q", driver)
 	}
 }
 
