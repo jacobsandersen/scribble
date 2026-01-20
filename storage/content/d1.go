@@ -163,28 +163,70 @@ func (cs *D1ContentStore) Create(ctx context.Context, doc util.Mf2Document) (str
 }
 
 func (cs *D1ContentStore) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
-	slug, err := util.SlugFromURL(url)
+	oldSlug, err := util.SlugFromURL(url)
 	if err != nil {
 		return url, err
 	}
 
-	doc, err := cs.getDocBySlug(ctx, slug)
+	doc, err := cs.getDocBySlug(ctx, oldSlug)
 	if err != nil {
 		return url, err
 	}
 
 	applyMutations(doc, replacements, additions, deletions)
 
+	// Check if slug needs to be recomputed
+	var newSlug string
+	if shouldRecomputeSlug(replacements, additions) {
+		proposedSlug, err := computeNewSlug(doc, replacements)
+		if err != nil {
+			return url, err
+		}
+
+		// Ensure the slug is unique; if collision, append UUID
+		newSlug, err = ensureUniqueSlug(ctx, cs, proposedSlug, oldSlug)
+		if err != nil {
+			return url, err
+		}
+
+		// Update the slug property in the document with the final unique slug
+		doc.Properties["slug"] = []any{newSlug}
+	} else {
+		newSlug = oldSlug
+	}
+
 	payload, err := json.Marshal(doc)
 	if err != nil {
 		return url, err
 	}
 
-	if _, err := cs.executeQuery(ctx, cs.updateQuery(), []any{string(payload), deletedFlag(doc), slug}); err != nil {
-		return url, err
+	newURL := cs.publicURL + newSlug
+
+	// If slug changed, we need to delete the old row and insert a new one
+	// D1 doesn't support full transactions, but we've already checked for slug collision
+	// above, so the INSERT should not fail on primary key constraint.
+	// Execute queries sequentially for best-effort atomicity.
+	if newSlug != oldSlug {
+		deleteQuery := fmt.Sprintf("DELETE FROM %s WHERE slug = ?", cs.table)
+		queries := []struct {
+			sql    string
+			params []any
+		}{
+			{sql: deleteQuery, params: []any{oldSlug}},
+			{sql: cs.insertQuery(), params: []any{newSlug, newURL, string(payload), deletedFlag(doc)}},
+		}
+
+		if err := cs.executeBatch(ctx, queries); err != nil {
+			return url, err
+		}
+	} else {
+		// No slug change, just update in place
+		if _, err := cs.executeQuery(ctx, cs.updateQuery(), []any{string(payload), deletedFlag(doc), oldSlug}); err != nil {
+			return url, err
+		}
 	}
 
-	return cs.publicURL + slug, nil
+	return newURL, nil
 }
 
 func (cs *D1ContentStore) Delete(ctx context.Context, url string) error {
@@ -329,4 +371,20 @@ func convertParams(params []any) []string {
 	}
 
 	return out
+}
+
+// executeBatch sends multiple SQL queries to D1 sequentially.
+// Note: D1 doesn't support full transactions, but we can execute queries in sequence.
+// If any query fails, we return an error. The caller should handle rollback logic if needed.
+func (cs *D1ContentStore) executeBatch(ctx context.Context, queries []struct {
+	sql    string
+	params []any
+}) error {
+	// Execute each query in sequence
+	for i, q := range queries {
+		if _, err := cs.executeQuery(ctx, q.sql, q.params); err != nil {
+			return fmt.Errorf("batch query %d failed: %w", i, err)
+		}
+	}
+	return nil
 }

@@ -1,10 +1,12 @@
 package content
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/server/util"
 )
 
@@ -103,4 +105,93 @@ func deletedFlag(doc *util.Mf2Document) bool {
 	}
 
 	return false
+}
+
+// shouldRecomputeSlug checks if the mutations affect properties that should trigger slug recomputation.
+// Returns true if "slug" is directly replaced with a non-empty value,
+// or if "name" or "content" are replaced/added with non-empty values.
+func shouldRecomputeSlug(replacements map[string][]any, additions map[string][]any) bool {
+	// Direct slug replacement - but only if non-empty
+	if slugVals, hasSlug := replacements["slug"]; hasSlug && len(slugVals) > 0 {
+		return true
+	}
+
+	// Check if name or content are being replaced with non-empty values
+	if nameVals, hasName := replacements["name"]; hasName && len(nameVals) > 0 {
+		return true
+	}
+	if contentVals, hasContent := replacements["content"]; hasContent && len(contentVals) > 0 {
+		return true
+	}
+
+	// Check if name or content are being added with non-empty values
+	if nameVals, hasName := additions["name"]; hasName && len(nameVals) > 0 {
+		return true
+	}
+	if contentVals, hasContent := additions["content"]; hasContent && len(contentVals) > 0 {
+		return true
+	}
+
+	return false
+}
+
+// computeNewSlug determines the new slug for a document after mutations.
+// If the slug was explicitly set in replacements, use that.
+// Otherwise, generate a new slug from name/content using util.GenerateSlug.
+func computeNewSlug(doc *util.Mf2Document, replacements map[string][]any) (string, error) {
+	// If slug was directly replaced, validate it
+	if slugVals, ok := replacements["slug"]; ok {
+		if len(slugVals) == 0 {
+			return "", fmt.Errorf("slug replacement cannot be empty array")
+		}
+		if slug, ok := slugVals[0].(string); ok && slug != "" {
+			return slug, nil
+		}
+		return "", fmt.Errorf("slug replacement must be a non-empty string")
+	}
+
+	// Generate slug from current document state (after mutations have been applied)
+	generated := util.GenerateSlug(*doc)
+	if generated == "" {
+		return "", fmt.Errorf("cannot generate slug: document has no name or content properties with text to derive slug from")
+	}
+
+	return generated, nil
+}
+
+// ensureUniqueSlug checks if the proposed slug already exists (excluding the old slug).
+// If it does, appends a UUID suffix to make it unique. Returns the final unique slug.
+func ensureUniqueSlug(ctx context.Context, store ContentStore, proposedSlug, oldSlug string) (string, error) {
+	// If the slug didn't actually change, no collision possible
+	if proposedSlug == oldSlug {
+		return proposedSlug, nil
+	}
+
+	// Check if the proposed slug already exists
+	exists, err := store.ExistsBySlug(ctx, proposedSlug)
+	if err != nil {
+		return "", fmt.Errorf("failed to check slug existence: %w", err)
+	}
+
+	// If it doesn't exist, we can use it as-is
+	if !exists {
+		return proposedSlug, nil
+	}
+
+	// Collision detected - append UUID to make it unique
+	uniqueSlug := fmt.Sprintf("%s-%s", proposedSlug, uuid.New().String())
+
+	// Sanity check: verify the UUID-suffixed slug doesn't exist either
+	// (extremely unlikely but theoretically possible)
+	exists, err = store.ExistsBySlug(ctx, uniqueSlug)
+	if err != nil {
+		return "", fmt.Errorf("failed to check unique slug existence: %w", err)
+	}
+
+	if exists {
+		// This should never happen in practice, but if it does, fail safely
+		return "", fmt.Errorf("slug collision persists even after UUID suffix: %s", uniqueSlug)
+	}
+
+	return uniqueSlug, nil
 }

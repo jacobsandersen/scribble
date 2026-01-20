@@ -213,8 +213,16 @@ func TestMicropub_CreateUpdateDeleteFlow(t *testing.T) {
 	}
 	updResp.Body.Close()
 
-	if updResp.StatusCode != http.StatusNoContent {
+	// Updating name triggers slug recomputation, so expect 201 Created with new Location
+	if updResp.StatusCode != http.StatusCreated {
 		t.Fatalf("unexpected update status: %d", updResp.StatusCode)
+	}
+
+	// Get the new location if slug changed
+	newLoc := updResp.Header.Get("Location")
+	if newLoc != "" {
+		loc = newLoc
+		sourceURL = srv.URL + "/?q=source&url=" + url.QueryEscape(loc)
 	}
 
 	// Verify update via source

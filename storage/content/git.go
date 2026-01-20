@@ -18,6 +18,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/go-git/go-git/v6/plumbing/transport/http"
 	"github.com/go-git/go-git/v6/plumbing/transport/ssh"
+	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/server/util"
 )
@@ -245,7 +246,7 @@ func (cs *GitContentStore) Create(ctx context.Context, doc util.Mf2Document) (st
 }
 
 func (cs *GitContentStore) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
-	slug, err := util.SlugFromURL(url)
+	oldSlug, err := util.SlugFromURL(url)
 	if err != nil {
 		return url, err
 	}
@@ -257,7 +258,7 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 		return url, fmt.Errorf("failed to update repo from remote: %w", err)
 	}
 
-	doc, err := cs.readDocumentBySlug(slug)
+	doc, err := cs.readDocumentBySlug(oldSlug)
 	if err != nil {
 		return url, err
 	}
@@ -267,35 +268,109 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 
 	applyMutations(doc, replacements, additions, deletions)
 
+	// Check if slug needs to be recomputed
+	var newSlug string
+	if shouldRecomputeSlug(replacements, additions) {
+		proposedSlug, err := computeNewSlug(doc, replacements)
+		if err != nil {
+			return url, err
+		}
+
+		// CRITICAL: Check for collision BEFORE making any writes to disk
+		// We already hold the lock, so use the unlocked version
+		if proposedSlug != oldSlug {
+			exists, err := cs.existsBySlugUnlocked(proposedSlug)
+			if err != nil {
+				return url, fmt.Errorf("failed to check slug collision: %w", err)
+			}
+
+			if exists {
+				// Collision detected - append UUID to make it unique
+				proposedSlug = fmt.Sprintf("%s-%s", proposedSlug, uuid.New().String())
+
+				// Sanity check the UUID-suffixed slug
+				exists, err = cs.existsBySlugUnlocked(proposedSlug)
+				if err != nil {
+					return url, fmt.Errorf("failed to check unique slug: %w", err)
+				}
+				if exists {
+					return url, fmt.Errorf("slug collision persists even after UUID suffix: %s", proposedSlug)
+				}
+			}
+		}
+
+		newSlug = proposedSlug
+		// Update the slug property in the document with the final unique slug
+		doc.Properties["slug"] = []any{newSlug}
+	} else {
+		newSlug = oldSlug
+	}
+
 	jsonBytes, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return url, err
 	}
 
-	filename := slug + ".json"
-	relPath := filepath.Join(cs.cfg.Path, filename)
-	fullPath := filepath.Join(cs.tmpDir, relPath)
-
-	if err = os.WriteFile(fullPath, jsonBytes, 0644); err != nil {
-		return url, fmt.Errorf("failed to write file: %w", err)
-	}
+	oldFilename := oldSlug + ".json"
+	newFilename := newSlug + ".json"
+	oldRelPath := filepath.Join(cs.cfg.Path, oldFilename)
+	newRelPath := filepath.Join(cs.cfg.Path, newFilename)
+	oldFullPath := filepath.Join(cs.tmpDir, oldRelPath)
+	newFullPath := filepath.Join(cs.tmpDir, newRelPath)
 
 	wt, err := cs.repo.Worktree()
 	if err != nil {
 		return url, fmt.Errorf("failed to get worktree: %w", err)
 	}
 
-	if _, err = wt.Add(relPath); err != nil {
-		return url, fmt.Errorf("failed to add file to git: %w", err)
+	// If slug changed, rename the file
+	// At this point, we've already verified the slug doesn't collide
+	if newSlug != oldSlug {
+		// Write to new file
+		if err = os.WriteFile(newFullPath, jsonBytes, 0644); err != nil {
+			return url, fmt.Errorf("failed to write new file: %w", err)
+		}
+
+		// Remove old file
+		if err = os.Remove(oldFullPath); err != nil {
+			return url, fmt.Errorf("failed to remove old file: %w", err)
+		}
+
+		// Stage both operations
+		if _, err = wt.Add(newRelPath); err != nil {
+			return url, fmt.Errorf("failed to add new file to git: %w", err)
+		}
+
+		if _, err = wt.Remove(oldRelPath); err != nil {
+			return url, fmt.Errorf("failed to remove old file from git: %w", err)
+		}
+
+		_, err = wt.Commit(fmt.Sprintf("scribble(update): rename %v to %v", oldSlug, newSlug), &git.CommitOptions{
+			Author: &object.Signature{
+				Name:  "scribble",
+				Email: "scribble@local",
+				When:  time.Now(),
+			},
+		})
+	} else {
+		// No slug change, just update in place
+		if err = os.WriteFile(oldFullPath, jsonBytes, 0644); err != nil {
+			return url, fmt.Errorf("failed to write file: %w", err)
+		}
+
+		if _, err = wt.Add(oldRelPath); err != nil {
+			return url, fmt.Errorf("failed to add file to git: %w", err)
+		}
+
+		_, err = wt.Commit(fmt.Sprintf("scribble(update): update content entry: %v", oldSlug), &git.CommitOptions{
+			Author: &object.Signature{
+				Name:  "scribble",
+				Email: "scribble@local",
+				When:  time.Now(),
+			},
+		})
 	}
 
-	_, err = wt.Commit(fmt.Sprintf("scribble(update): update content entry: %v", slug), &git.CommitOptions{
-		Author: &object.Signature{
-			Name:  "scribble",
-			Email: "scribble@local",
-			When:  time.Now(),
-		},
-	})
 	if err != nil {
 		return url, fmt.Errorf("failed to create commit: %w", err)
 	}
@@ -304,7 +379,7 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 		return url, fmt.Errorf("failed to push local: %w", err)
 	}
 
-	return cs.publicURL + slug, nil
+	return cs.publicURL + newSlug, nil
 }
 
 func (cs *GitContentStore) Delete(ctx context.Context, url string) error {
@@ -460,6 +535,12 @@ func (cs *GitContentStore) ExistsBySlug(ctx context.Context, slug string) (bool,
 		return false, err
 	}
 
+	return cs.existsBySlugUnlocked(slug)
+}
+
+// existsBySlugUnlocked checks if a slug exists WITHOUT acquiring the mutex.
+// MUST be called with cs.mu already locked.
+func (cs *GitContentStore) existsBySlugUnlocked(slug string) (bool, error) {
 	head, err := cs.repo.Head()
 	if err != nil {
 		return false, err
