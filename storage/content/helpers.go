@@ -36,7 +36,7 @@ func containsValue(list []any, value any) bool {
 
 func normalizeBaseURL(raw string) string {
 	trimmed := strings.TrimSpace(raw)
-	trimmed = strings.TrimSuffix(trimmed, "/")
+	trimmed = strings.TrimRight(trimmed, "/")
 	return trimmed + "/"
 }
 

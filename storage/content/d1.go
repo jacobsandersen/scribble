@@ -255,10 +255,7 @@ func (cs *D1ContentStore) setDeletedStatus(ctx context.Context, url string, dele
 		return url, err
 	}
 
-	if doc.Properties == nil {
-		doc.Properties = make(map[string][]any)
-	}
-	doc.Properties["deleted"] = []any{deleted}
+	applyMutations(doc, map[string][]any{"deleted": []any{deleted}}, nil, nil)
 
 	payload, err := json.Marshal(doc)
 	if err != nil {

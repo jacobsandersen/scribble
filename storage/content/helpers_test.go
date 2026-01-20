@@ -63,3 +63,38 @@ func TestApplyMutationsAndDeletedFlag(t *testing.T) {
 		t.Fatalf("nil doc should not be deleted")
 	}
 }
+
+func TestNormalizeBaseURL(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"https://example.com", "https://example.com/"},
+		{"https://example.com/", "https://example.com/"},
+		{"  https://example.com/api  ", "https://example.com/api/"},
+		{"https://example.com/nested//", "https://example.com/nested/"},
+	}
+
+	for _, tc := range cases {
+		if got := normalizeBaseURL(tc.in); got != tc.want {
+			t.Fatalf("normalizeBaseURL(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestExtractSlug(t *testing.T) {
+	good := util.Mf2Document{Type: []string{"h-entry"}, Properties: map[string][]any{"slug": []any{"ok"}}}
+	if slug, err := extractSlug(good); err != nil || slug != "ok" {
+		t.Fatalf("extractSlug good doc got slug=%q err=%v", slug, err)
+	}
+
+	missing := util.Mf2Document{Type: []string{"h-entry"}, Properties: map[string][]any{}}
+	if _, err := extractSlug(missing); err == nil {
+		t.Fatalf("expected error for missing slug")
+	}
+
+	empty := util.Mf2Document{Type: []string{"h-entry"}, Properties: map[string][]any{"slug": []any{""}}}
+	if _, err := extractSlug(empty); err == nil {
+		t.Fatalf("expected error for empty slug")
+	}
+}
