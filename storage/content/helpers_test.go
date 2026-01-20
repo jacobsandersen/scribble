@@ -1,7 +1,9 @@
 package content
 
 import (
+	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/indieinfra/scribble/server/util"
@@ -148,6 +150,24 @@ func TestShouldRecomputeSlug(t *testing.T) {
 			additions:    map[string][]any{},
 			want:         false,
 		},
+		{
+			name:         "name replaced with empty array",
+			replacements: map[string][]any{"name": []any{}},
+			additions:    map[string][]any{},
+			want:         false,
+		},
+		{
+			name:         "content replaced with empty array",
+			replacements: map[string][]any{"content": []any{}},
+			additions:    map[string][]any{},
+			want:         false,
+		},
+		{
+			name:         "slug replaced with empty array",
+			replacements: map[string][]any{"slug": []any{}},
+			additions:    map[string][]any{},
+			want:         false,
+		},
 	}
 
 	for _, tc := range cases {
@@ -218,6 +238,16 @@ func TestComputeNewSlug(t *testing.T) {
 			want:         "",
 			wantErr:      true,
 		},
+		{
+			name: "empty slug array replacement",
+			doc: &util.Mf2Document{
+				Type:       []string{"h-entry"},
+				Properties: map[string][]any{"name": []any{"Title"}},
+			},
+			replacements: map[string][]any{"slug": []any{}},
+			want:         "",
+			wantErr:      true,
+		},
 	}
 
 	for _, tc := range cases {
@@ -229,6 +259,101 @@ func TestComputeNewSlug(t *testing.T) {
 			if got != tc.want {
 				t.Fatalf("computeNewSlug() = %q, want %q", got, tc.want)
 			}
+			// Verify error message is descriptive when expected
+			if tc.wantErr && err != nil {
+				errMsg := err.Error()
+				if !strings.Contains(errMsg, "slug") && !strings.Contains(errMsg, "name") && !strings.Contains(errMsg, "content") {
+					t.Fatalf("expected descriptive error message, got: %s", errMsg)
+				}
+			}
 		})
 	}
+}
+
+// mockStoreForCollisionTest implements ContentStore for testing ensureUniqueSlug
+type mockStoreForCollisionTest struct {
+	existingSlugs map[string]bool
+}
+
+func (m *mockStoreForCollisionTest) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
+	return m.existingSlugs[slug], nil
+}
+
+func (m *mockStoreForCollisionTest) Create(ctx context.Context, doc util.Mf2Document) (string, bool, error) {
+	return "", false, nil
+}
+
+func (m *mockStoreForCollisionTest) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
+	return "", nil
+}
+
+func (m *mockStoreForCollisionTest) Delete(ctx context.Context, url string) error {
+	return nil
+}
+
+func (m *mockStoreForCollisionTest) Undelete(ctx context.Context, url string) (string, bool, error) {
+	return "", false, nil
+}
+
+func (m *mockStoreForCollisionTest) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
+	return nil, nil
+}
+
+func TestEnsureUniqueSlug(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("no collision - slug unchanged", func(t *testing.T) {
+		store := &mockStoreForCollisionTest{
+			existingSlugs: map[string]bool{"existing-slug": true},
+		}
+
+		// If old and new slug are the same, should return as-is
+		result, err := ensureUniqueSlug(ctx, store, "same-slug", "same-slug")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result != "same-slug" {
+			t.Fatalf("expected same-slug, got %s", result)
+		}
+	})
+
+	t.Run("no collision - new slug available", func(t *testing.T) {
+		store := &mockStoreForCollisionTest{
+			existingSlugs: map[string]bool{"existing-slug": true},
+		}
+
+		result, err := ensureUniqueSlug(ctx, store, "new-slug", "old-slug")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result != "new-slug" {
+			t.Fatalf("expected new-slug, got %s", result)
+		}
+	})
+
+	t.Run("collision - UUID suffix appended", func(t *testing.T) {
+		store := &mockStoreForCollisionTest{
+			existingSlugs: map[string]bool{"colliding-slug": true},
+		}
+
+		result, err := ensureUniqueSlug(ctx, store, "colliding-slug", "old-slug")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Should have UUID appended
+		if result == "colliding-slug" {
+			t.Fatalf("expected UUID suffix to be appended")
+		}
+
+		if !strings.HasPrefix(result, "colliding-slug-") {
+			t.Fatalf("expected result to start with 'colliding-slug-', got %s", result)
+		}
+
+		// Verify UUID format (rough check - should have hyphens)
+		suffix := strings.TrimPrefix(result, "colliding-slug-")
+		if len(suffix) < 30 || !strings.Contains(suffix, "-") {
+			t.Fatalf("expected UUID suffix, got %s", suffix)
+		}
+	})
 }

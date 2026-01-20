@@ -216,17 +216,19 @@ func TestD1ContentStore_UpdateSlugChange(t *testing.T) {
 
 	store := newD1TestStore(t, []d1Expectation{
 		{contains: "CREATE TABLE", success: true},
-		// Update with name change - should trigger slug change
-		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}},
-		{contains: "DELETE FROM", success: true}, // Delete old slug
-		{contains: "INSERT INTO", success: true}, // Insert with new slug
-		// Direct slug replacement
-		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}},
-		{contains: "DELETE FROM", success: true}, // Delete old slug
-		{contains: "INSERT INTO", success: true}, // Insert with custom slug
-		// Update without slug change
-		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}},
-		{contains: "UPDATE", success: true}, // Simple update, no delete/insert
+		// Test 1: Update with name change - should trigger slug change
+		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}}, // Get doc
+		{contains: "SELECT 1", success: true, rows: []map[string]any{}},                                   // Check collision (no collision)
+		{contains: "DELETE FROM", success: true},                                                          // Delete old slug
+		{contains: "INSERT INTO", success: true},                                                          // Insert with new slug
+		// Test 2: Direct slug replacement
+		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}}, // Get doc
+		{contains: "SELECT 1", success: true, rows: []map[string]any{}},                                   // Check collision (no collision)
+		{contains: "DELETE FROM", success: true},                                                          // Delete old slug
+		{contains: "INSERT INTO", success: true},                                                          // Insert with custom slug
+		// Test 3: Update without slug change
+		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}}, // Get doc
+		{contains: "UPDATE", success: true}, // Simple update, no collision check needed
 	})
 
 	ctx := context.Background()
@@ -259,3 +261,33 @@ func TestD1ContentStore_UpdateSlugChange(t *testing.T) {
 	}
 }
 
+func TestD1ContentStore_UpdateSlugCollision(t *testing.T) {
+	existing := util.Mf2Document{
+		Type:       []string{"h-entry"},
+		Properties: map[string][]any{"slug": []any{"old-slug"}, "name": []any{"Old Title"}},
+	}
+	existingPayload, _ := json.Marshal(existing)
+
+	store := newD1TestStore(t, []d1Expectation{
+		{contains: "CREATE TABLE", success: true},
+		// Update with name that would collide with existing slug
+		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}}, // Get doc
+		{contains: "SELECT 1", success: true, rows: []map[string]any{{"1": 1}}},                           // Check collision - exists!
+		{contains: "SELECT 1", success: true, rows: []map[string]any{}},                                   // Check UUID-suffixed slug - doesn't exist
+		{contains: "DELETE FROM", success: true},                                                          // Delete old slug
+		{contains: "INSERT INTO", success: true},                                                          // Insert with UUID-suffixed slug
+	})
+
+	ctx := context.Background()
+
+	// Update name to something that would collide with an existing slug
+	newURL, err := store.Update(ctx, "https://example.test/old-slug", map[string][]any{"name": []any{"Colliding Title"}}, nil, nil)
+	if err != nil {
+		t.Fatalf("update with collision failed: %v", err)
+	}
+
+	// Should have UUID appended due to collision
+	if !strings.HasPrefix(newURL, "https://example.test/colliding-title-") {
+		t.Fatalf("expected UUID suffix due to collision, got %s", newURL)
+	}
+}

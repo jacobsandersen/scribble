@@ -284,6 +284,11 @@ func TestSQLContentStore_UpdateSlugChange(t *testing.T) {
 		WithArgs("old-slug").
 		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(existingPayload)))
 
+	// Check if new slug exists (collision check)
+	mock.ExpectQuery(regexp.QuoteMeta(store.existsQuery())).
+		WithArgs("new-awesome-title").
+		WillReturnRows(sqlmock.NewRows([]string{"1"})) // No collision
+
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM")).
 		WithArgs("old-slug").
@@ -315,6 +320,11 @@ func TestSQLContentStore_UpdateSlugChange(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(store.selectQuery())).
 		WithArgs("another-slug").
 		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(existingPayload2)))
+
+	// Check if custom slug exists (collision check)
+	mock.ExpectQuery(regexp.QuoteMeta(store.existsQuery())).
+		WithArgs("custom-slug").
+		WillReturnRows(sqlmock.NewRows([]string{"1"})) // No collision
 
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM")).
@@ -365,4 +375,3 @@ func TestSQLContentStore_UpdateSlugChange(t *testing.T) {
 		t.Fatalf("unmet expectations: %v", err)
 	}
 }
-

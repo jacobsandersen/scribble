@@ -165,12 +165,18 @@ func (cs *SQLContentStore) Update(ctx context.Context, url string, replacements 
 	// Check if slug needs to be recomputed
 	var newSlug string
 	if shouldRecomputeSlug(replacements, additions) {
-		newSlug, err = computeNewSlug(doc, replacements)
+		proposedSlug, err := computeNewSlug(doc, replacements)
 		if err != nil {
 			return url, err
 		}
 
-		// Update the slug property in the document
+		// Ensure the slug is unique; if collision, append UUID
+		newSlug, err = ensureUniqueSlug(ctx, cs, proposedSlug, oldSlug)
+		if err != nil {
+			return url, err
+		}
+
+		// Update the slug property in the document with the final unique slug
 		doc.Properties["slug"] = []any{newSlug}
 	} else {
 		newSlug = oldSlug

@@ -18,6 +18,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/go-git/go-git/v6/plumbing/transport/http"
 	"github.com/go-git/go-git/v6/plumbing/transport/ssh"
+	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/server/util"
 )
@@ -270,12 +271,36 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 	// Check if slug needs to be recomputed
 	var newSlug string
 	if shouldRecomputeSlug(replacements, additions) {
-		newSlug, err = computeNewSlug(doc, replacements)
+		proposedSlug, err := computeNewSlug(doc, replacements)
 		if err != nil {
 			return url, err
 		}
 
-		// Update the slug property in the document
+		// CRITICAL: Check for collision BEFORE making any writes to disk
+		// We already hold the lock, so use the unlocked version
+		if proposedSlug != oldSlug {
+			exists, err := cs.existsBySlugUnlocked(proposedSlug)
+			if err != nil {
+				return url, fmt.Errorf("failed to check slug collision: %w", err)
+			}
+
+			if exists {
+				// Collision detected - append UUID to make it unique
+				proposedSlug = fmt.Sprintf("%s-%s", proposedSlug, uuid.New().String())
+
+				// Sanity check the UUID-suffixed slug
+				exists, err = cs.existsBySlugUnlocked(proposedSlug)
+				if err != nil {
+					return url, fmt.Errorf("failed to check unique slug: %w", err)
+				}
+				if exists {
+					return url, fmt.Errorf("slug collision persists even after UUID suffix: %s", proposedSlug)
+				}
+			}
+		}
+
+		newSlug = proposedSlug
+		// Update the slug property in the document with the final unique slug
 		doc.Properties["slug"] = []any{newSlug}
 	} else {
 		newSlug = oldSlug
@@ -299,6 +324,7 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 	}
 
 	// If slug changed, rename the file
+	// At this point, we've already verified the slug doesn't collide
 	if newSlug != oldSlug {
 		// Write to new file
 		if err = os.WriteFile(newFullPath, jsonBytes, 0644); err != nil {
@@ -509,6 +535,12 @@ func (cs *GitContentStore) ExistsBySlug(ctx context.Context, slug string) (bool,
 		return false, err
 	}
 
+	return cs.existsBySlugUnlocked(slug)
+}
+
+// existsBySlugUnlocked checks if a slug exists WITHOUT acquiring the mutex.
+// MUST be called with cs.mu already locked.
+func (cs *GitContentStore) existsBySlugUnlocked(slug string) (bool, error) {
 	head, err := cs.repo.Head()
 	if err != nil {
 		return false, err
