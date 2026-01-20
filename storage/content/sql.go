@@ -85,7 +85,7 @@ func newSQLContentStoreWithDB(cfg *config.SQLContentStrategy, db *sql.DB) (*SQLC
 		db:          db,
 		table:       table,
 		placeholder: placeholder,
-		publicURL:   strings.TrimSuffix(cfg.PublicUrl, "/"),
+		publicURL:   normalizeBaseURL(cfg.PublicUrl),
 	}, nil
 }
 
@@ -134,7 +134,7 @@ func (cs *SQLContentStore) Create(ctx context.Context, doc util.Mf2Document) (st
 		return "", false, err
 	}
 
-	url := cs.publicURL + "/" + slug
+	url := cs.publicURL + slug
 
 	payload, err := json.Marshal(doc)
 	if err != nil {
@@ -146,7 +146,7 @@ func (cs *SQLContentStore) Create(ctx context.Context, doc util.Mf2Document) (st
 		return "", false, err
 	}
 
-	return url, true, nil
+	return cs.publicURL + slug, true, nil
 }
 
 func (cs *SQLContentStore) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
@@ -168,7 +168,7 @@ func (cs *SQLContentStore) Update(ctx context.Context, url string, replacements 
 	}
 
 	_, err = cs.db.ExecContext(ctx, cs.updateQuery(), string(payload), deletedFlag(doc), slug)
-	return url, err
+	return cs.publicURL + slug, err
 }
 
 func (cs *SQLContentStore) Delete(ctx context.Context, url string) error {
@@ -177,8 +177,8 @@ func (cs *SQLContentStore) Delete(ctx context.Context, url string) error {
 }
 
 func (cs *SQLContentStore) Undelete(ctx context.Context, url string) (string, bool, error) {
-	_, err := cs.setDeletedStatus(ctx, url, false)
-	return url, false, err
+	newURL, err := cs.setDeletedStatus(ctx, url, false)
+	return newURL, false, err
 }
 
 func (cs *SQLContentStore) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
@@ -232,7 +232,7 @@ func (cs *SQLContentStore) setDeletedStatus(ctx context.Context, url string, del
 	}
 
 	_, err = cs.db.ExecContext(ctx, cs.updateQuery(), string(payload), deleted, slug)
-	return url, err
+	return cs.publicURL + slug, err
 }
 
 func (cs *SQLContentStore) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
