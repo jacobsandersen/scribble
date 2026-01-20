@@ -104,3 +104,49 @@ func deletedFlag(doc *util.Mf2Document) bool {
 
 	return false
 }
+
+// shouldRecomputeSlug checks if the mutations affect properties that should trigger slug recomputation.
+// Returns true if "slug" is directly replaced, or if "name" or "content" are replaced/added.
+func shouldRecomputeSlug(replacements map[string][]any, additions map[string][]any) bool {
+	// Direct slug replacement always means we should use the new slug
+	if _, hasSlug := replacements["slug"]; hasSlug {
+		return true
+	}
+
+	// Check if name or content are being replaced or added
+	if _, hasName := replacements["name"]; hasName {
+		return true
+	}
+	if _, hasContent := replacements["content"]; hasContent {
+		return true
+	}
+	if _, hasName := additions["name"]; hasName {
+		return true
+	}
+	if _, hasContent := additions["content"]; hasContent {
+		return true
+	}
+
+	return false
+}
+
+// computeNewSlug determines the new slug for a document after mutations.
+// If the slug was explicitly set in replacements, use that.
+// Otherwise, generate a new slug from name/content using util.GenerateSlug.
+func computeNewSlug(doc *util.Mf2Document, replacements map[string][]any) (string, error) {
+	// If slug was directly replaced, use it
+	if slugVals, ok := replacements["slug"]; ok && len(slugVals) > 0 {
+		if slug, ok := slugVals[0].(string); ok && slug != "" {
+			return slug, nil
+		}
+		return "", fmt.Errorf("slug replacement must be a non-empty string")
+	}
+
+	// Generate slug from current document state (after mutations have been applied)
+	generated := util.GenerateSlug(*doc)
+	if generated == "" {
+		return "", fmt.Errorf("failed to generate slug from document")
+	}
+
+	return generated, nil
+}

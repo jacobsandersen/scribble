@@ -196,8 +196,8 @@ func TestGitContentStore_Update(t *testing.T) {
 	doc := util.Mf2Document{
 		Type: []string{"h-entry"},
 		Properties: map[string][]any{
-			"slug": {"post-2"},
-			"name": {"First"},
+			"slug":     {"post-2"},
+			"category": {"First"},
 		},
 	}
 
@@ -206,8 +206,8 @@ func TestGitContentStore_Update(t *testing.T) {
 		t.Fatalf("create failed: %v", err)
 	}
 
-	replacements := map[string][]any{"name": {"Updated"}}
-	additions := map[string][]any{"category": {"tech"}}
+	replacements := map[string][]any{"category": {"Updated"}}
+	additions := map[string][]any{"syndication": {"https://example.com"}}
 
 	if _, err := store.Update(ctx, url, replacements, additions, nil); err != nil {
 		t.Fatalf("update failed: %v", err)
@@ -218,12 +218,110 @@ func TestGitContentStore_Update(t *testing.T) {
 		t.Fatalf("get failed: %v", err)
 	}
 
-	if got.Properties["name"][0] != "Updated" {
-		t.Fatalf("name not updated: %+v", got.Properties["name"])
+	if got.Properties["category"][0] != "Updated" {
+		t.Fatalf("category not updated: %+v", got.Properties["category"])
 	}
 
-	if len(got.Properties["category"]) != 1 || got.Properties["category"][0] != "tech" {
-		t.Fatalf("category not added: %+v", got.Properties["category"])
+	if len(got.Properties["syndication"]) != 1 || got.Properties["syndication"][0] != "https://example.com" {
+		t.Fatalf("syndication not added: %+v", got.Properties["syndication"])
+	}
+}
+
+func TestGitContentStore_UpdateSlugChange(t *testing.T) {
+	store := newTestGitStore(t)
+	ctx := context.Background()
+
+	// Test 1: Update name should trigger slug change
+	doc1 := util.Mf2Document{
+		Type: []string{"h-entry"},
+		Properties: map[string][]any{
+			"slug": {"old-slug"},
+			"name": {"Old Title"},
+		},
+	}
+
+	url1, _, err := store.Create(ctx, doc1)
+	if err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	newURL1, err := store.Update(ctx, url1, map[string][]any{"name": {"New Awesome Title"}}, nil, nil)
+	if err != nil {
+		t.Fatalf("update with name change failed: %v", err)
+	}
+
+	if newURL1 != "https://example.test/new-awesome-title" {
+		t.Fatalf("expected new URL https://example.test/new-awesome-title, got %s", newURL1)
+	}
+
+	// Verify the new file exists and old file is gone
+	oldPath := filepath.Join(store.tmpDir, store.cfg.Path, "old-slug.json")
+	newPath := filepath.Join(store.tmpDir, store.cfg.Path, "new-awesome-title.json")
+
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Fatalf("old file should not exist: %s", oldPath)
+	}
+
+	if _, err := os.Stat(newPath); err != nil {
+		t.Fatalf("new file should exist: %s", newPath)
+	}
+
+	// Verify we can retrieve by new URL
+	got1, err := store.Get(ctx, newURL1)
+	if err != nil {
+		t.Fatalf("get by new URL failed: %v", err)
+	}
+
+	if got1.Properties["name"][0] != "New Awesome Title" {
+		t.Fatalf("expected name 'New Awesome Title', got %v", got1.Properties["name"][0])
+	}
+
+	if got1.Properties["slug"][0] != "new-awesome-title" {
+		t.Fatalf("expected slug 'new-awesome-title', got %v", got1.Properties["slug"][0])
+	}
+
+	// Test 2: Direct slug replacement
+	doc2 := util.Mf2Document{
+		Type: []string{"h-entry"},
+		Properties: map[string][]any{
+			"slug": {"another-slug"},
+			"name": {"Some Title"},
+		},
+	}
+
+	url2, _, err := store.Create(ctx, doc2)
+	if err != nil {
+		t.Fatalf("create2 failed: %v", err)
+	}
+
+	newURL2, err := store.Update(ctx, url2, map[string][]any{"slug": {"custom-slug"}}, nil, nil)
+	if err != nil {
+		t.Fatalf("update with direct slug failed: %v", err)
+	}
+
+	if newURL2 != "https://example.test/custom-slug" {
+		t.Fatalf("expected new URL https://example.test/custom-slug, got %s", newURL2)
+	}
+
+	// Verify the file rename happened
+	oldPath2 := filepath.Join(store.tmpDir, store.cfg.Path, "another-slug.json")
+	newPath2 := filepath.Join(store.tmpDir, store.cfg.Path, "custom-slug.json")
+
+	if _, err := os.Stat(oldPath2); !os.IsNotExist(err) {
+		t.Fatalf("old file should not exist: %s", oldPath2)
+	}
+
+	if _, err := os.Stat(newPath2); err != nil {
+		t.Fatalf("new file should exist: %s", newPath2)
+	}
+
+	got2, err := store.Get(ctx, newURL2)
+	if err != nil {
+		t.Fatalf("get by new URL2 failed: %v", err)
+	}
+
+	if got2.Properties["slug"][0] != "custom-slug" {
+		t.Fatalf("expected slug 'custom-slug', got %v", got2.Properties["slug"][0])
 	}
 }
 

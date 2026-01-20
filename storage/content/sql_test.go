@@ -67,7 +67,7 @@ func TestSQLContentStore_UpdateDeleteUndelete_MySQLPlaceholders(t *testing.T) {
 	store, mock := newSQLTestStore(t, "mysql", nil)
 	ctx := context.Background()
 
-	existing := util.Mf2Document{Type: []string{"h-entry"}, Properties: map[string][]any{"slug": []any{"entry-1"}, "name": []any{"old"}}}
+	existing := util.Mf2Document{Type: []string{"h-entry"}, Properties: map[string][]any{"slug": []any{"entry-1"}, "category": []any{"old"}}}
 	existingPayload, err := json.Marshal(existing)
 	if err != nil {
 		t.Fatalf("marshal existing: %v", err)
@@ -78,15 +78,15 @@ func TestSQLContentStore_UpdateDeleteUndelete_MySQLPlaceholders(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(existingPayload)))
 
 	mock.ExpectExec(regexp.QuoteMeta(store.updateQuery())).
-		WithArgs(jsonContains("\"name\":[\"new\"]"), false, "entry-1").
+		WithArgs(jsonContains("\"category\":[\"new\"]"), false, "entry-1").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	_, err = store.Update(ctx, "https://example.test/entry-1", map[string][]any{"name": []any{"new"}}, nil, nil)
+	_, err = store.Update(ctx, "https://example.test/entry-1", map[string][]any{"category": []any{"new"}}, nil, nil)
 	if err != nil {
 		t.Fatalf("update failed: %v", err)
 	}
 
-	updated := util.Mf2Document{Type: []string{"h-entry"}, Properties: map[string][]any{"slug": []any{"entry-1"}, "name": []any{"new"}}}
+	updated := util.Mf2Document{Type: []string{"h-entry"}, Properties: map[string][]any{"slug": []any{"entry-1"}, "category": []any{"new"}}}
 	updatedPayload, err := json.Marshal(updated)
 	if err != nil {
 		t.Fatalf("marshal updated: %v", err)
@@ -104,7 +104,7 @@ func TestSQLContentStore_UpdateDeleteUndelete_MySQLPlaceholders(t *testing.T) {
 		t.Fatalf("delete failed: %v", err)
 	}
 
-	deletedDoc := util.Mf2Document{Type: []string{"h-entry"}, Properties: map[string][]any{"slug": []any{"entry-1"}, "name": []any{"new"}, "deleted": []any{true}}}
+	deletedDoc := util.Mf2Document{Type: []string{"h-entry"}, Properties: map[string][]any{"slug": []any{"entry-1"}, "category": []any{"new"}, "deleted": []any{true}}}
 	deletedPayload, err := json.Marshal(deletedDoc)
 	if err != nil {
 		t.Fatalf("marshal deleted: %v", err)
@@ -264,3 +264,105 @@ func (m jsonContains) Match(v driver.Value) bool {
 	s, ok := v.(string)
 	return ok && strings.Contains(s, string(m))
 }
+
+func TestSQLContentStore_UpdateSlugChange(t *testing.T) {
+	store, mock := newSQLTestStore(t, "postgres", nil)
+	ctx := context.Background()
+
+	// Original document
+	existing := util.Mf2Document{
+		Type:       []string{"h-entry"},
+		Properties: map[string][]any{"slug": []any{"old-slug"}, "name": []any{"Old Title"}},
+	}
+	existingPayload, err := json.Marshal(existing)
+	if err != nil {
+		t.Fatalf("marshal existing: %v", err)
+	}
+
+	// Test 1: Update with new name should trigger slug change
+	mock.ExpectQuery(regexp.QuoteMeta(store.selectQuery())).
+		WithArgs("old-slug").
+		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(existingPayload)))
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM")).
+		WithArgs("old-slug").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(store.insertQuery())).
+		WithArgs("new-awesome-title", "https://example.test/new-awesome-title", jsonContains("\"slug\":[\"new-awesome-title\"]"), false).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	newURL, err := store.Update(ctx, "https://example.test/old-slug", map[string][]any{"name": []any{"New Awesome Title"}}, nil, nil)
+	if err != nil {
+		t.Fatalf("update with name change failed: %v", err)
+	}
+
+	if newURL != "https://example.test/new-awesome-title" {
+		t.Fatalf("expected new URL https://example.test/new-awesome-title, got %s", newURL)
+	}
+
+	// Test 2: Direct slug replacement
+	existing2 := util.Mf2Document{
+		Type:       []string{"h-entry"},
+		Properties: map[string][]any{"slug": []any{"another-slug"}, "name": []any{"Some Title"}},
+	}
+	existingPayload2, err := json.Marshal(existing2)
+	if err != nil {
+		t.Fatalf("marshal existing2: %v", err)
+	}
+
+	mock.ExpectQuery(regexp.QuoteMeta(store.selectQuery())).
+		WithArgs("another-slug").
+		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(existingPayload2)))
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM")).
+		WithArgs("another-slug").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(store.insertQuery())).
+		WithArgs("custom-slug", "https://example.test/custom-slug", jsonContains("\"slug\":[\"custom-slug\"]"), false).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	newURL2, err := store.Update(ctx, "https://example.test/another-slug", map[string][]any{"slug": []any{"custom-slug"}}, nil, nil)
+	if err != nil {
+		t.Fatalf("update with direct slug failed: %v", err)
+	}
+
+	if newURL2 != "https://example.test/custom-slug" {
+		t.Fatalf("expected new URL https://example.test/custom-slug, got %s", newURL2)
+	}
+
+	// Test 3: Update without slug change (unrelated property)
+	existing3 := util.Mf2Document{
+		Type:       []string{"h-entry"},
+		Properties: map[string][]any{"slug": []any{"stable-slug"}, "name": []any{"Title"}},
+	}
+	existingPayload3, err := json.Marshal(existing3)
+	if err != nil {
+		t.Fatalf("marshal existing3: %v", err)
+	}
+
+	mock.ExpectQuery(regexp.QuoteMeta(store.selectQuery())).
+		WithArgs("stable-slug").
+		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(existingPayload3)))
+
+	mock.ExpectExec(regexp.QuoteMeta(store.updateQuery())).
+		WithArgs(jsonContains("\"category\""), false, "stable-slug").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	newURL3, err := store.Update(ctx, "https://example.test/stable-slug", map[string][]any{"category": []any{"test"}}, nil, nil)
+	if err != nil {
+		t.Fatalf("update without slug change failed: %v", err)
+	}
+
+	if newURL3 != "https://example.test/stable-slug" {
+		t.Fatalf("expected URL to remain stable-slug, got %s", newURL3)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+

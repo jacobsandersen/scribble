@@ -98,3 +98,137 @@ func TestExtractSlug(t *testing.T) {
 		t.Fatalf("expected error for empty slug")
 	}
 }
+
+func TestShouldRecomputeSlug(t *testing.T) {
+	cases := []struct {
+		name         string
+		replacements map[string][]any
+		additions    map[string][]any
+		want         bool
+	}{
+		{
+			name:         "direct slug replacement",
+			replacements: map[string][]any{"slug": []any{"new-slug"}},
+			additions:    map[string][]any{},
+			want:         true,
+		},
+		{
+			name:         "name replacement",
+			replacements: map[string][]any{"name": []any{"New Title"}},
+			additions:    map[string][]any{},
+			want:         true,
+		},
+		{
+			name:         "content replacement",
+			replacements: map[string][]any{"content": []any{"New content"}},
+			additions:    map[string][]any{},
+			want:         true,
+		},
+		{
+			name:         "name addition",
+			replacements: map[string][]any{},
+			additions:    map[string][]any{"name": []any{"Added Title"}},
+			want:         true,
+		},
+		{
+			name:         "content addition",
+			replacements: map[string][]any{},
+			additions:    map[string][]any{"content": []any{"Added content"}},
+			want:         true,
+		},
+		{
+			name:         "unrelated property",
+			replacements: map[string][]any{"category": []any{"test"}},
+			additions:    map[string][]any{"syndication": []any{"https://example.com"}},
+			want:         false,
+		},
+		{
+			name:         "empty mutations",
+			replacements: map[string][]any{},
+			additions:    map[string][]any{},
+			want:         false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := shouldRecomputeSlug(tc.replacements, tc.additions)
+			if got != tc.want {
+				t.Fatalf("shouldRecomputeSlug() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestComputeNewSlug(t *testing.T) {
+	cases := []struct {
+		name         string
+		doc          *util.Mf2Document
+		replacements map[string][]any
+		want         string
+		wantErr      bool
+	}{
+		{
+			name: "explicit slug replacement",
+			doc: &util.Mf2Document{
+				Type:       []string{"h-entry"},
+				Properties: map[string][]any{"name": []any{"Original Title"}},
+			},
+			replacements: map[string][]any{"slug": []any{"custom-slug"}},
+			want:         "custom-slug",
+			wantErr:      false,
+		},
+		{
+			name: "generate from name after replacement",
+			doc: &util.Mf2Document{
+				Type:       []string{"h-entry"},
+				Properties: map[string][]any{"name": []any{"New Amazing Title"}},
+			},
+			replacements: map[string][]any{},
+			want:         "new-amazing-title",
+			wantErr:      false,
+		},
+		{
+			name: "generate from content",
+			doc: &util.Mf2Document{
+				Type:       []string{"h-entry"},
+				Properties: map[string][]any{"content": []any{"Hello world this is content"}},
+			},
+			replacements: map[string][]any{},
+			want:         "hello-world-this-is-content",
+			wantErr:      false,
+		},
+		{
+			name: "empty slug replacement error",
+			doc: &util.Mf2Document{
+				Type:       []string{"h-entry"},
+				Properties: map[string][]any{},
+			},
+			replacements: map[string][]any{"slug": []any{""}},
+			want:         "",
+			wantErr:      true,
+		},
+		{
+			name: "no content to generate slug",
+			doc: &util.Mf2Document{
+				Type:       []string{"h-entry"},
+				Properties: map[string][]any{},
+			},
+			replacements: map[string][]any{},
+			want:         "",
+			wantErr:      true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := computeNewSlug(tc.doc, tc.replacements)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("computeNewSlug() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Fatalf("computeNewSlug() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

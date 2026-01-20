@@ -150,25 +150,71 @@ func (cs *SQLContentStore) Create(ctx context.Context, doc util.Mf2Document) (st
 }
 
 func (cs *SQLContentStore) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
-	slug, err := util.SlugFromURL(url)
+	oldSlug, err := util.SlugFromURL(url)
 	if err != nil {
 		return url, err
 	}
 
-	doc, err := cs.getDocBySlug(ctx, slug)
+	doc, err := cs.getDocBySlug(ctx, oldSlug)
 	if err != nil {
 		return url, err
 	}
 
 	applyMutations(doc, replacements, additions, deletions)
 
+	// Check if slug needs to be recomputed
+	var newSlug string
+	if shouldRecomputeSlug(replacements, additions) {
+		newSlug, err = computeNewSlug(doc, replacements)
+		if err != nil {
+			return url, err
+		}
+
+		// Update the slug property in the document
+		doc.Properties["slug"] = []any{newSlug}
+	} else {
+		newSlug = oldSlug
+	}
+
 	payload, err := json.Marshal(doc)
 	if err != nil {
 		return url, err
 	}
 
-	_, err = cs.db.ExecContext(ctx, cs.updateQuery(), string(payload), deletedFlag(doc), slug)
-	return cs.publicURL + slug, err
+	newURL := cs.publicURL + newSlug
+
+	// If slug changed, we need to delete the old row and insert a new one
+	if newSlug != oldSlug {
+		// Start a transaction to ensure atomicity
+		tx, err := cs.db.BeginTx(ctx, nil)
+		if err != nil {
+			return url, err
+		}
+		defer tx.Rollback()
+
+		// Delete old entry
+		deleteQuery := fmt.Sprintf("DELETE FROM %s WHERE slug = %s", cs.table, cs.placeholderFor(1))
+		if _, err := tx.ExecContext(ctx, deleteQuery, oldSlug); err != nil {
+			return url, err
+		}
+
+		// Insert new entry with new slug
+		if _, err := tx.ExecContext(ctx, cs.insertQuery(), newSlug, newURL, string(payload), deletedFlag(doc)); err != nil {
+			return url, err
+		}
+
+		if err := tx.Commit(); err != nil {
+			return url, err
+		}
+	} else {
+		// No slug change, just update in place
+		_, err = cs.db.ExecContext(ctx, cs.updateQuery(), string(payload), deletedFlag(doc), oldSlug)
+		if err != nil {
+			return url, err
+		}
+	}
+
+	return newURL, nil
 }
 
 func (cs *SQLContentStore) Delete(ctx context.Context, url string) error {
