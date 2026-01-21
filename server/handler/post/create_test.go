@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/indieinfra/scribble/server/auth"
+	"github.com/indieinfra/scribble/server/body"
 	"github.com/indieinfra/scribble/server/util"
 )
 
@@ -207,13 +208,13 @@ func TestCreateSlugLookupError(t *testing.T) {
 		"type":       []any{"h-entry"},
 		"properties": map[string]any{"name": []any{"Hello"}},
 	}
-	body, _ := json.Marshal(payload)
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	bodyBytes, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	req = req.WithContext(auth.AddToken(req.Context(), &auth.TokenDetails{Me: st.Cfg.Micropub.MeUrl, Scope: "create"}))
 
 	rr := httptest.NewRecorder()
-	Create(st, rr, req, &ParsedBody{Data: map[string]any{"type": []any{"h-entry"}, "properties": map[string]any{"name": []any{"Hello"}}}})
+	Create(st, rr, req, &body.ParsedBody{Data: map[string]any{"type": []any{"h-entry"}, "properties": map[string]any{"name": []any{"Hello"}}}})
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500 when slug lookup fails, got %d", rr.Code)
@@ -243,7 +244,7 @@ func TestCreateMultipartAccepted(t *testing.T) {
 	req = req.WithContext(auth.AddToken(req.Context(), &auth.TokenDetails{Me: st.Cfg.Micropub.MeUrl, Scope: "create"}))
 
 	rr := httptest.NewRecorder()
-	parsed, ok := ReadBody(st.Cfg, rr, req)
+	parsed, ok := body.ReadBody(st.Cfg, rr, req)
 	if !ok {
 		t.Fatalf("expected body to parse")
 	}
@@ -288,7 +289,7 @@ func TestCreateUploadError(t *testing.T) {
 	req = req.WithContext(auth.AddToken(req.Context(), &auth.TokenDetails{Me: st.Cfg.Micropub.MeUrl, Scope: "create"}))
 
 	rr := httptest.NewRecorder()
-	parsed, ok := ReadBody(st.Cfg, rr, req)
+	parsed, ok := body.ReadBody(st.Cfg, rr, req)
 	if !ok {
 		t.Fatalf("expected body to parse")
 	}
@@ -315,13 +316,13 @@ func TestCreateContentStoreError(t *testing.T) {
 		"type":       []any{"h-entry"},
 		"properties": map[string]any{"name": []any{"Hello"}},
 	}
-	body, _ := json.Marshal(payload)
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	bodyBytes, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	req = req.WithContext(auth.AddToken(req.Context(), &auth.TokenDetails{Me: st.Cfg.Micropub.MeUrl, Scope: "create"}))
 
 	rr := httptest.NewRecorder()
-	parsed, ok := ReadBody(st.Cfg, rr, req)
+	parsed, ok := body.ReadBody(st.Cfg, rr, req)
 	if !ok {
 		t.Fatalf("expected body to parse")
 	}

@@ -14,7 +14,7 @@ func HandleSource(st *state.ScribbleState, w http.ResponseWriter, r *http.Reques
 
 	url := q.Get("url")
 	if url == "" {
-		resp.WriteInvalidRequest(w, "source requires a url")
+		resp.WriteInvalidRequest(w, "Source query requires a URL parameter")
 		return
 	}
 

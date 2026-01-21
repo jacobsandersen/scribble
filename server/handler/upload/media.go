@@ -25,7 +25,7 @@ func HandleMediaUpload(st *state.ScribbleState) http.HandlerFunc {
 			return
 		}
 
-		token := util.PopAccessToken(values)
+		token := auth.PopAccessToken(values)
 		if token != "" && auth.GetToken(r.Context()) != nil {
 			if file != nil {
 				file.Close()

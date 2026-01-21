@@ -601,3 +601,190 @@ func TestGitContentStore_FetchAndFastForward_ReinitOnLocalRefFailure(t *testing.
 		t.Fatalf("expected main reference after reinit: %v", err)
 	}
 }
+
+func TestGitContentStore_RollbackLastCommit(t *testing.T) {
+	store := newTestGitStore(t)
+	ctx := context.Background()
+
+	// Create initial document
+	doc := util.Mf2Document{
+		Type: []string{"h-entry"},
+		Properties: map[string][]any{
+			"slug":    {"test-slug"},
+			"content": {"initial content"},
+		},
+	}
+
+	_, _, err := store.Create(ctx, doc)
+	if err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	// Get current HEAD
+	ref, err := store.repo.Head()
+	if err != nil {
+		t.Fatalf("failed to get HEAD: %v", err)
+	}
+	originalHead := ref.Hash()
+
+	// Make a local change and commit (without pushing)
+	store.mu.Lock()
+	wt, err := store.repo.Worktree()
+	if err != nil {
+		store.mu.Unlock()
+		t.Fatalf("failed to get worktree: %v", err)
+	}
+
+	testPath := filepath.Join(store.tmpDir, store.cfg.Path, "test-file.txt")
+	if err := os.WriteFile(testPath, []byte("test"), 0644); err != nil {
+		store.mu.Unlock()
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	if _, err := wt.Add(filepath.Join(store.cfg.Path, "test-file.txt")); err != nil {
+		store.mu.Unlock()
+		t.Fatalf("failed to add test file: %v", err)
+	}
+
+	_, err = wt.Commit("test commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "test",
+			Email: "test@test",
+			When:  time.Now(),
+		},
+	})
+	if err != nil {
+		store.mu.Unlock()
+		t.Fatalf("failed to commit: %v", err)
+	}
+
+	// Verify HEAD moved forward
+	ref, err = store.repo.Head()
+	if err != nil {
+		store.mu.Unlock()
+		t.Fatalf("failed to get new HEAD: %v", err)
+	}
+	newHead := ref.Hash()
+
+	if originalHead == newHead {
+		store.mu.Unlock()
+		t.Fatalf("HEAD should have moved forward after commit")
+	}
+
+	// Now rollback
+	if err := store.rollbackLastCommit(); err != nil {
+		store.mu.Unlock()
+		t.Fatalf("rollback failed: %v", err)
+	}
+	store.mu.Unlock()
+
+	// Verify HEAD is back to original
+	ref, err = store.repo.Head()
+	if err != nil {
+		t.Fatalf("failed to get HEAD after rollback: %v", err)
+	}
+	rolledBackHead := ref.Hash()
+
+	if originalHead != rolledBackHead {
+		t.Fatalf("expected HEAD to be rolled back to %v, got %v", originalHead, rolledBackHead)
+	}
+
+	// Verify test file is gone from working directory
+	if _, err := os.Stat(testPath); !os.IsNotExist(err) {
+		t.Fatalf("test file should not exist after rollback")
+	}
+}
+
+func TestGitContentStore_ResetToHead(t *testing.T) {
+	store := newTestGitStore(t)
+	ctx := context.Background()
+
+	// Create initial document
+	doc := util.Mf2Document{
+		Type: []string{"h-entry"},
+		Properties: map[string][]any{
+			"slug":    {"test-slug"},
+			"content": {"initial content"},
+		},
+	}
+
+	_, _, err := store.Create(ctx, doc)
+	if err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	wt, err := store.repo.Worktree()
+	if err != nil {
+		t.Fatalf("failed to get worktree: %v", err)
+	}
+
+	// Make some changes and stage them
+	testPath := filepath.Join(store.tmpDir, store.cfg.Path, "dirty-file.txt")
+	if err := os.WriteFile(testPath, []byte("dirty content"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	if _, err := wt.Add(filepath.Join(store.cfg.Path, "dirty-file.txt")); err != nil {
+		t.Fatalf("failed to stage file: %v", err)
+	}
+
+	// Modify existing file
+	existingPath := filepath.Join(store.tmpDir, store.cfg.Path, "test-slug.json")
+	if err := os.WriteFile(existingPath, []byte(`{"modified": true}`), 0644); err != nil {
+		t.Fatalf("failed to modify existing file: %v", err)
+	}
+
+	// Verify files exist and are dirty
+	if _, err := os.Stat(testPath); err != nil {
+		t.Fatalf("dirty file should exist before reset: %v", err)
+	}
+
+	status, err := wt.Status()
+	if err != nil {
+		t.Fatalf("failed to get status: %v", err)
+	}
+
+	if !status.IsClean() {
+		// Good - we have dirty changes
+	} else {
+		t.Fatalf("expected dirty working tree before reset")
+	}
+
+	// Now reset to HEAD - should clean everything up
+	if err := store.resetToHead(wt); err != nil {
+		t.Fatalf("resetToHead failed: %v", err)
+	}
+
+	// Verify working tree is clean
+	status, err = wt.Status()
+	if err != nil {
+		t.Fatalf("failed to get status after reset: %v", err)
+	}
+
+	if !status.IsClean() {
+		t.Fatalf("expected clean working tree after reset, got: %v", status)
+	}
+
+	// Verify dirty file is gone
+	if _, err := os.Stat(testPath); !os.IsNotExist(err) {
+		t.Fatalf("dirty file should not exist after reset")
+	}
+
+	// Verify existing file is restored to original content
+	data, err := os.ReadFile(existingPath)
+	if err != nil {
+		t.Fatalf("failed to read existing file after reset: %v", err)
+	}
+
+	var restored util.Mf2Document
+	if err := json.Unmarshal(data, &restored); err != nil {
+		t.Fatalf("failed to unmarshal restored file: %v", err)
+	}
+
+	if restored.Properties["content"][0] != "initial content" {
+		t.Fatalf("expected original content to be restored, got: %v", restored.Properties["content"][0])
+	}
+}

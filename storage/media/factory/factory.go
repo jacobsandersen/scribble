@@ -44,10 +44,10 @@ func init() {
 	Register("noop", func(cfg *config.Media) (media.MediaStore, error) {
 		return &media.NoopMediaStore{}, nil
 	})
-	Register("", func(cfg *config.Media) (media.MediaStore, error) {
-		return &media.NoopMediaStore{}, nil
-	})
 	Register("s3", func(cfg *config.Media) (media.MediaStore, error) {
 		return media.NewS3MediaStore(cfg)
+	})
+	Register("filesystem", func(cfg *config.Media) (media.MediaStore, error) {
+		return media.NewFilesystemMediaStore(cfg.Filesystem)
 	})
 }

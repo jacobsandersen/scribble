@@ -38,8 +38,13 @@ func TestNoopContentStoreLifecycle(t *testing.T) {
 		t.Fatalf("unexpected undelete result: %q %v %v", newURL, undeleted, err)
 	}
 
-	if got, err := store.Get(ctx, url); err != nil || got == nil || got.Url != url {
+	got, err := store.Get(ctx, url)
+	if err != nil || got == nil {
 		t.Fatalf("unexpected get result: %+v err=%v", got, err)
+	}
+
+	if urls := got.Properties["url"]; len(urls) == 0 || urls[0] != url {
+		t.Fatalf("expected url property to contain %q, got %+v", url, urls)
 	}
 
 	exists, err := store.ExistsBySlug(ctx, "slug")

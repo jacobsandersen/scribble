@@ -27,10 +27,11 @@ type Micropub struct {
 }
 
 type Content struct {
-	Strategy string              `mapstructure:"strategy" validate:"required,oneof=git sql d1"`
-	Git      *GitContentStrategy `mapstructure:"git" validate:"required_if=Strategy git"`
-	SQL      *SQLContentStrategy `mapstructure:"sql" validate:"required_if=Strategy sql"`
-	D1       *D1ContentStrategy  `mapstructure:"d1" validate:"required_if=Strategy d1"`
+	Strategy   string                     `mapstructure:"strategy" validate:"required,oneof=git sql d1 filesystem"`
+	Git        *GitContentStrategy        `mapstructure:"git" validate:"required_if=Strategy git"`
+	SQL        *SQLContentStrategy        `mapstructure:"sql" validate:"required_if=Strategy sql"`
+	D1         *D1ContentStrategy         `mapstructure:"d1" validate:"required_if=Strategy d1"`
+	Filesystem *FilesystemContentStrategy `mapstructure:"filesystem" validate:"required_if=Strategy filesystem"`
 }
 
 type GitContentStrategy struct {
@@ -62,6 +63,12 @@ type D1ContentStrategy struct {
 	Endpoint    string  `mapstructure:"endpoint" validate:"omitempty,url"`
 }
 
+type FilesystemContentStrategy struct {
+	Path        string `mapstructure:"path" validate:"required,abspath"`
+	PublicUrl   string `mapstructure:"public_url" validate:"required,url"`
+	PathPattern string `mapstructure:"path_pattern" validate:"omitempty,pathpattern"`
+}
+
 type UsernamePasswordAuth struct {
 	Username string `mapstructure:"username" validate:"required"`
 	Password string `mapstructure:"password" validate:"required"`
@@ -70,12 +77,13 @@ type UsernamePasswordAuth struct {
 type SshKeyAuth struct {
 	Username           string `mapstructure:"username" validate:"required"`
 	PrivateKeyFilePath string `mapstructure:"private_key_file_path" validate:"required,file"`
-	Passphrase         string `mapstructure:"passphrase" validate:"required"`
+	Passphrase         string `mapstructure:"passphrase" validate:"omitempty"`
 }
 
 type Media struct {
-	Strategy string           `mapstructure:"strategy" validate:"required,oneof=s3"`
-	S3       *S3MediaStrategy `mapstructure:"s3" validate:"required_if=Strategy s3"`
+	Strategy   string                   `mapstructure:"strategy" validate:"required,oneof=s3 filesystem"`
+	S3         *S3MediaStrategy         `mapstructure:"s3" validate:"required_if=Strategy s3"`
+	Filesystem *FilesystemMediaStrategy `mapstructure:"filesystem" validate:"required_if=Strategy filesystem"`
 }
 
 type S3MediaStrategy struct {
@@ -88,4 +96,10 @@ type S3MediaStrategy struct {
 	DisableSSL     bool   `mapstructure:"disable_ssl"`
 	Prefix         string `mapstructure:"prefix"`
 	PublicUrl      string `mapstructure:"public_url" validate:"omitempty,url"`
+}
+
+type FilesystemMediaStrategy struct {
+	Path        string `mapstructure:"path" validate:"required,abspath"`
+	PublicUrl   string `mapstructure:"public_url" validate:"required,url"`
+	PathPattern string `mapstructure:"path_pattern" validate:"omitempty,pathpattern"`
 }

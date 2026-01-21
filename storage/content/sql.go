@@ -6,14 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/server/util"
+	storageutil "github.com/indieinfra/scribble/storage/util"
 )
 
 type placeholderStyle int
@@ -85,7 +88,7 @@ func newSQLContentStoreWithDB(cfg *config.SQLContentStrategy, db *sql.DB) (*SQLC
 		db:          db,
 		table:       table,
 		placeholder: placeholder,
-		publicURL:   normalizeBaseURL(cfg.PublicUrl),
+		publicURL:   storageutil.NormalizeBaseURL(cfg.PublicUrl),
 	}, nil
 }
 
@@ -170,13 +173,12 @@ func (cs *SQLContentStore) Update(ctx context.Context, url string, replacements 
 			return url, err
 		}
 
-		// Ensure the slug is unique; if collision, append UUID
-		newSlug, err = ensureUniqueSlug(ctx, cs, proposedSlug, oldSlug)
-		if err != nil {
-			return url, err
-		}
+		// For SQL, we defer collision checking until inside the transaction
+		// to prevent TOCTOU races. Just use the proposed slug for now.
+		newSlug = proposedSlug
 
-		// Update the slug property in the document with the final unique slug
+		// Update the slug property in the document with the proposed slug
+		// (may be adjusted for uniqueness later inside the transaction)
 		doc.Properties["slug"] = []any{newSlug}
 	} else {
 		newSlug = oldSlug
@@ -189,14 +191,38 @@ func (cs *SQLContentStore) Update(ctx context.Context, url string, replacements 
 
 	newURL := cs.publicURL + newSlug
 
+	// Start a transaction for atomic update
+	tx, err := cs.db.BeginTx(ctx, nil)
+	if err != nil {
+		return url, err
+	}
+	defer func() {
+		// Rollback is safe to call after Commit; it will return sql.ErrTxDone
+		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			log.Printf("unexpected error during transaction rollback in Update: %v", rbErr)
+		}
+	}()
+
 	// If slug changed, we need to delete the old row and insert a new one
 	if newSlug != oldSlug {
-		// Start a transaction to ensure atomicity
-		tx, err := cs.db.BeginTx(ctx, nil)
+		// Perform collision check inside transaction to prevent TOCTOU race
+		finalSlug, err := cs.ensureUniqueSlugInTx(ctx, tx, newSlug, oldSlug)
 		if err != nil {
 			return url, err
 		}
-		defer tx.Rollback()
+
+		// If collision detection changed the slug, update the document and URL
+		if finalSlug != newSlug {
+			newSlug = finalSlug
+			newURL = cs.publicURL + newSlug
+			doc.Properties["slug"] = []any{newSlug}
+
+			// Re-marshal with updated slug
+			payload, err = json.Marshal(doc)
+			if err != nil {
+				return url, err
+			}
+		}
 
 		// Delete old entry
 		deleteQuery := fmt.Sprintf("DELETE FROM %s WHERE slug = %s", cs.table, cs.placeholderFor(1))
@@ -208,16 +234,15 @@ func (cs *SQLContentStore) Update(ctx context.Context, url string, replacements 
 		if _, err := tx.ExecContext(ctx, cs.insertQuery(), newSlug, newURL, string(payload), deletedFlag(doc)); err != nil {
 			return url, err
 		}
-
-		if err := tx.Commit(); err != nil {
-			return url, err
-		}
 	} else {
 		// No slug change, just update in place
-		_, err = cs.db.ExecContext(ctx, cs.updateQuery(), string(payload), deletedFlag(doc), oldSlug)
-		if err != nil {
+		if _, err := tx.ExecContext(ctx, cs.updateQuery(), string(payload), deletedFlag(doc), oldSlug); err != nil {
 			return url, err
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return url, err
 	}
 
 	return newURL, nil
@@ -280,8 +305,26 @@ func (cs *SQLContentStore) setDeletedStatus(ctx context.Context, url string, del
 		return url, err
 	}
 
-	_, err = cs.db.ExecContext(ctx, cs.updateQuery(), string(payload), deleted, slug)
-	return cs.publicURL + slug, err
+	// Use transaction for consistency with Update method
+	tx, err := cs.db.BeginTx(ctx, nil)
+	if err != nil {
+		return url, err
+	}
+	defer func() {
+		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			log.Printf("unexpected error during transaction rollback in setDeletedStatus: %v", rbErr)
+		}
+	}()
+
+	if _, err := tx.ExecContext(ctx, cs.updateQuery(), string(payload), deleted, slug); err != nil {
+		return url, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return url, err
+	}
+
+	return cs.publicURL + slug, nil
 }
 
 func (cs *SQLContentStore) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
@@ -297,6 +340,50 @@ func (cs *SQLContentStore) ExistsBySlug(ctx context.Context, slug string) (bool,
 	}
 
 	return true, nil
+}
+
+// ensureUniqueSlugInTx checks if the proposed slug already exists within a transaction.
+// If it does, appends a UUID suffix to make it unique. Returns the final unique slug.
+// This must be called within an active transaction to prevent TOCTOU races.
+func (cs *SQLContentStore) ensureUniqueSlugInTx(ctx context.Context, tx *sql.Tx, proposedSlug, oldSlug string) (string, error) {
+	// If the slug didn't actually change, no collision possible
+	if proposedSlug == oldSlug {
+		return proposedSlug, nil
+	}
+
+	// Check if the proposed slug already exists (within transaction)
+	query := cs.existsQuery()
+	row := tx.QueryRowContext(ctx, query, proposedSlug)
+
+	var found int
+	err := row.Scan(&found)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("failed to check slug existence: %w", err)
+	}
+
+	exists := (err == nil)
+
+	// If it doesn't exist, we can use it as-is
+	if !exists {
+		return proposedSlug, nil
+	}
+
+	// Collision detected - append UUID to make it unique
+	uniqueSlug := fmt.Sprintf("%s-%s", proposedSlug, uuid.New().String())
+
+	// Sanity check: verify the UUID-suffixed slug doesn't exist either
+	row = tx.QueryRowContext(ctx, query, uniqueSlug)
+	err = row.Scan(&found)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("failed to check unique slug existence: %w", err)
+	}
+
+	if err == nil {
+		// This should never happen in practice, but if it does, fail safely
+		return "", fmt.Errorf("slug collision persists even after UUID suffix: %s", uniqueSlug)
+	}
+
+	return uniqueSlug, nil
 }
 
 func (cs *SQLContentStore) insertQuery() string {

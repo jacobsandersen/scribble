@@ -59,7 +59,17 @@ func newD1TestStore(t *testing.T, expectations []d1Expectation) *D1ContentStore 
 
 		w.WriteHeader(status)
 		if !exp.success {
-			_ = json.NewEncoder(w).Encode(map[string]any{"success": false, "errors": []map[string]any{{"message": "fail"}}})
+			// Return result array with success: false to match D1 API structure
+			resp := map[string]any{
+				"success": true,
+				"result": []map[string]any{
+					{
+						"success": false,
+						"error":   "simulated failure",
+					},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
 			return
 		}
 
@@ -219,13 +229,15 @@ func TestD1ContentStore_UpdateSlugChange(t *testing.T) {
 		// Test 1: Update with name change - should trigger slug change
 		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}}, // Get doc
 		{contains: "SELECT 1", success: true, rows: []map[string]any{}},                                   // Check collision (no collision)
-		{contains: "DELETE FROM", success: true},                                                          // Delete old slug
 		{contains: "INSERT INTO", success: true},                                                          // Insert with new slug
+		{contains: "SELECT 1", success: true, rows: []map[string]any{{"1": 1}}},                           // Verify new row exists
+		{contains: "DELETE FROM", success: true},                                                          // Delete old slug
 		// Test 2: Direct slug replacement
 		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}}, // Get doc
 		{contains: "SELECT 1", success: true, rows: []map[string]any{}},                                   // Check collision (no collision)
-		{contains: "DELETE FROM", success: true},                                                          // Delete old slug
 		{contains: "INSERT INTO", success: true},                                                          // Insert with custom slug
+		{contains: "SELECT 1", success: true, rows: []map[string]any{{"1": 1}}},                           // Verify new row exists
+		{contains: "DELETE FROM", success: true},                                                          // Delete old slug
 		// Test 3: Update without slug change
 		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}}, // Get doc
 		{contains: "UPDATE", success: true}, // Simple update, no collision check needed
@@ -274,8 +286,9 @@ func TestD1ContentStore_UpdateSlugCollision(t *testing.T) {
 		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}}, // Get doc
 		{contains: "SELECT 1", success: true, rows: []map[string]any{{"1": 1}}},                           // Check collision - exists!
 		{contains: "SELECT 1", success: true, rows: []map[string]any{}},                                   // Check UUID-suffixed slug - doesn't exist
-		{contains: "DELETE FROM", success: true},                                                          // Delete old slug
 		{contains: "INSERT INTO", success: true},                                                          // Insert with UUID-suffixed slug
+		{contains: "SELECT 1", success: true, rows: []map[string]any{{"1": 1}}},                           // Verify new row exists
+		{contains: "DELETE FROM", success: true},                                                          // Delete old slug
 	})
 
 	ctx := context.Background()
@@ -289,5 +302,76 @@ func TestD1ContentStore_UpdateSlugCollision(t *testing.T) {
 	// Should have UUID appended due to collision
 	if !strings.HasPrefix(newURL, "https://example.test/colliding-title-") {
 		t.Fatalf("expected UUID suffix due to collision, got %s", newURL)
+	}
+}
+
+func TestD1ContentStore_UpdateSlugChangeRollback(t *testing.T) {
+	existing := util.Mf2Document{
+		Type:       []string{"h-entry"},
+		Properties: map[string][]any{"slug": []any{"old-slug"}, "name": []any{"Old Title"}},
+	}
+	existingPayload, _ := json.Marshal(existing)
+
+	store := newD1TestStore(t, []d1Expectation{
+		{contains: "CREATE TABLE", success: true},
+		// Update with name change but DELETE fails - should rollback INSERT
+		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}}, // Get doc
+		{contains: "SELECT 1", success: true, rows: []map[string]any{}},                                   // Check collision (no collision)
+		{contains: "INSERT INTO", success: true},                                                          // Insert with new slug
+		{contains: "SELECT 1", success: true, rows: []map[string]any{{"1": 1}}},                           // Verify new row exists
+		{contains: "DELETE FROM", success: false},                                                         // Delete old slug FAILS
+		{contains: "DELETE FROM", success: true},                                                          // Rollback: delete new row
+	})
+
+	ctx := context.Background()
+
+	// Update should fail and rollback
+	newURL, err := store.Update(ctx, "https://example.test/old-slug", map[string][]any{"name": []any{"New Title"}}, nil, nil)
+	if err == nil {
+		t.Fatalf("expected error due to DELETE failure, got success")
+	}
+	if !strings.Contains(err.Error(), "failed to delete old row") {
+		t.Fatalf("expected error about failing to delete old row, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "rolled back successfully") {
+		t.Fatalf("expected error to mention successful rollback, got: %v", err)
+	}
+	// Should return original URL since rollback succeeded
+	if newURL != "https://example.test/old-slug" {
+		t.Fatalf("expected original URL after rollback, got %s", newURL)
+	}
+}
+
+func TestD1ContentStore_UpdateSlugChangeRollbackFails(t *testing.T) {
+	existing := util.Mf2Document{
+		Type:       []string{"h-entry"},
+		Properties: map[string][]any{"slug": []any{"old-slug"}, "name": []any{"Old Title"}},
+	}
+	existingPayload, _ := json.Marshal(existing)
+
+	store := newD1TestStore(t, []d1Expectation{
+		{contains: "CREATE TABLE", success: true},
+		// Update with name change but DELETE fails AND rollback fails - worst case
+		{contains: "SELECT doc", success: true, rows: []map[string]any{{"doc": string(existingPayload)}}}, // Get doc
+		{contains: "SELECT 1", success: true, rows: []map[string]any{}},                                   // Check collision (no collision)
+		{contains: "INSERT INTO", success: true},                                                          // Insert with new slug
+		{contains: "SELECT 1", success: true, rows: []map[string]any{{"1": 1}}},                           // Verify new row exists
+		{contains: "DELETE FROM", success: false},                                                         // Delete old slug FAILS
+		{contains: "DELETE FROM", success: false},                                                         // Rollback: delete new row ALSO FAILS
+	})
+
+	ctx := context.Background()
+
+	// Update should fail with indication of inconsistent state
+	newURL, err := store.Update(ctx, "https://example.test/old-slug", map[string][]any{"name": []any{"New Title"}}, nil, nil)
+	if err == nil {
+		t.Fatalf("expected error due to DELETE failure, got success")
+	}
+	if !strings.Contains(err.Error(), "system inconsistent") {
+		t.Fatalf("expected error to mention system inconsistency, got: %v", err)
+	}
+	// Should still return original URL
+	if newURL != "https://example.test/old-slug" {
+		t.Fatalf("expected original URL, got %s", newURL)
 	}
 }

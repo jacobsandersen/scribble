@@ -66,6 +66,15 @@ content:
   #   table_prefix: "scribble" # optional, defaults to "scribble"; final table becomes <prefix>_content; set to "" to use plain "content"
   #   endpoint: "https://api.cloudflare.com/client/v4" # optional override for testing/self-hosted proxies
 
+  # Use the local filesystem backend for simple deployments.
+  # strategy: filesystem
+  # filesystem:
+  #   path: "/var/www/scribble/content" # absolute path to store JSON documents
+  #   public_url: "https://example.org/content/" # base URL for permalinks
+  #   path_pattern: "{slug}.json" # optional: file path template; defaults to "{slug}.json"
+  #                                 # supports: {year}, {month}, {day}, {slug}, {ext}, {filename}
+  #                                 # example: "{year}/{month}/{slug}.json" for date-based organization
+
 media:
   strategy: s3
   s3:
@@ -78,3 +87,12 @@ media:
     disable_ssl: false
     prefix: ""
     public_url: "" # optional CDN/base URL override
+
+  # Use the local filesystem backend for simple deployments.
+  # strategy: filesystem
+  # filesystem:
+  #   path: "/var/www/scribble/media" # absolute path to store uploaded files
+  #   public_url: "https://example.org/media/" # base URL for media URLs
+  #   path_pattern: "{year}/{month}/{filename}" # optional: file path template; defaults to "{year}/{month}/{filename}"
+  #                                              # supports: {year}, {month}, {day}, {slug}, {ext}, {filename}
+  #                                              # example: "{year}/{month}/{day}/{filename}" for daily organization

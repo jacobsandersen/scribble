@@ -6,27 +6,28 @@ import (
 	"strings"
 
 	"github.com/indieinfra/scribble/server/auth"
+	"github.com/indieinfra/scribble/server/body"
 	"github.com/indieinfra/scribble/server/middleware"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 )
 
 func DispatchPost(st *state.ScribbleState) http.HandlerFunc {
-	handlers := map[string]func(*state.ScribbleState, http.ResponseWriter, *http.Request, *ParsedBody){
+	handlers := map[string]func(*state.ScribbleState, http.ResponseWriter, *http.Request, *body.ParsedBody){
 		"create": Create,
-		"update": func(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, body *ParsedBody) {
-			Update(st, w, r, body.Data)
+		"update": func(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb *body.ParsedBody) {
+			Update(st, w, r, pb.Data)
 		},
-		"delete": func(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, body *ParsedBody) {
-			Delete(st, w, r, body.Data, false)
+		"delete": func(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb *body.ParsedBody) {
+			Delete(st, w, r, pb.Data, false)
 		},
-		"undelete": func(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, body *ParsedBody) {
-			Delete(st, w, r, body.Data, true)
+		"undelete": func(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb *body.ParsedBody) {
+			Delete(st, w, r, pb.Data, true)
 		},
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		parsed, ok := ReadBody(st.Cfg, w, r)
+		parsed, ok := body.ReadBody(st.Cfg, w, r)
 		if !ok {
 			return
 		}

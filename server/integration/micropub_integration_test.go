@@ -23,6 +23,7 @@ import (
 	"github.com/indieinfra/scribble/server/handler/get"
 	"github.com/indieinfra/scribble/server/handler/post"
 	"github.com/indieinfra/scribble/server/state"
+	"github.com/indieinfra/scribble/server/util"
 	"github.com/indieinfra/scribble/storage/content"
 	"github.com/indieinfra/scribble/storage/media"
 )
@@ -185,7 +186,7 @@ func TestMicropub_CreateUpdateDeleteFlow(t *testing.T) {
 		t.Fatalf("unexpected source status: %d", srcResp.StatusCode)
 	}
 
-	var doc content.ContentObject
+	var doc util.Mf2Document
 	if err := json.NewDecoder(srcResp.Body).Decode(&doc); err != nil {
 		t.Fatalf("failed to decode source response: %v", err)
 	}
@@ -232,7 +233,7 @@ func TestMicropub_CreateUpdateDeleteFlow(t *testing.T) {
 	}
 	defer srcResp.Body.Close()
 
-	var docAfter content.ContentObject
+	var docAfter util.Mf2Document
 	if err := json.NewDecoder(srcResp.Body).Decode(&docAfter); err != nil {
 		t.Fatalf("failed to decode updated doc: %v", err)
 	}
@@ -264,7 +265,7 @@ func TestMicropub_CreateUpdateDeleteFlow(t *testing.T) {
 	}
 	defer srcResp.Body.Close()
 
-	var deletedDoc content.ContentObject
+	var deletedDoc util.Mf2Document
 	if err := json.NewDecoder(srcResp.Body).Decode(&deletedDoc); err != nil {
 		t.Fatalf("failed to decode deleted doc: %v", err)
 	}
@@ -330,7 +331,7 @@ func TestMicropub_MultipartCreateWithFile(t *testing.T) {
 		t.Fatalf("unexpected source status: %d", srcResp.StatusCode)
 	}
 
-	var doc content.ContentObject
+	var doc util.Mf2Document
 	if err := json.NewDecoder(srcResp.Body).Decode(&doc); err != nil {
 		t.Fatalf("failed to decode source response: %v", err)
 	}
@@ -396,7 +397,7 @@ func TestMicropub_MultipartCreateWithPhotoField(t *testing.T) {
 		t.Fatalf("unexpected source status: %d", srcResp.StatusCode)
 	}
 
-	var doc content.ContentObject
+	var doc util.Mf2Document
 	if err := json.NewDecoder(srcResp.Body).Decode(&doc); err != nil {
 		t.Fatalf("failed to decode source response: %v", err)
 	}
@@ -478,7 +479,7 @@ func TestMicropub_MultipartCreateWithMultipleFiles(t *testing.T) {
 		t.Fatalf("unexpected source status: %d", srcResp.StatusCode)
 	}
 
-	var doc content.ContentObject
+	var doc util.Mf2Document
 	if err := json.NewDecoder(srcResp.Body).Decode(&doc); err != nil {
 		t.Fatalf("failed to decode source response: %v", err)
 	}
@@ -555,7 +556,7 @@ func TestMicropub_MultipartCreateWithVideo(t *testing.T) {
 		t.Fatalf("unexpected source status: %d", srcResp.StatusCode)
 	}
 
-	var doc content.ContentObject
+	var doc util.Mf2Document
 	if err := json.NewDecoder(srcResp.Body).Decode(&doc); err != nil {
 		t.Fatalf("failed to decode source response: %v", err)
 	}

@@ -52,4 +52,8 @@ func init() {
 	Register("d1", func(cfg *config.Content) (content.ContentStore, error) {
 		return content.NewD1ContentStore(cfg.D1)
 	})
+
+	Register("filesystem", func(cfg *config.Content) (content.ContentStore, error) {
+		return content.NewFilesystemContentStore(cfg.Filesystem)
+	})
 }

@@ -77,9 +77,11 @@ func TestSQLContentStore_UpdateDeleteUndelete_MySQLPlaceholders(t *testing.T) {
 		WithArgs("entry-1").
 		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(existingPayload)))
 
+	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(store.updateQuery())).
 		WithArgs(jsonContains("\"category\":[\"new\"]"), false, "entry-1").
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 
 	_, err = store.Update(ctx, "https://example.test/entry-1", map[string][]any{"category": []any{"new"}}, nil, nil)
 	if err != nil {
@@ -96,9 +98,11 @@ func TestSQLContentStore_UpdateDeleteUndelete_MySQLPlaceholders(t *testing.T) {
 		WithArgs("entry-1").
 		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(updatedPayload)))
 
+	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(store.updateQuery())).
 		WithArgs(jsonContains("\"deleted\":[true]"), true, "entry-1").
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 
 	if err := store.Delete(ctx, "https://example.test/entry-1"); err != nil {
 		t.Fatalf("delete failed: %v", err)
@@ -114,9 +118,11 @@ func TestSQLContentStore_UpdateDeleteUndelete_MySQLPlaceholders(t *testing.T) {
 		WithArgs("entry-1").
 		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(deletedPayload)))
 
+	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(store.updateQuery())).
 		WithArgs(jsonContains("\"deleted\":[false]"), false, "entry-1").
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 
 	if _, _, err := store.Undelete(ctx, "https://example.test/entry-1"); err != nil {
 		t.Fatalf("undelete failed: %v", err)
@@ -284,12 +290,11 @@ func TestSQLContentStore_UpdateSlugChange(t *testing.T) {
 		WithArgs("old-slug").
 		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(existingPayload)))
 
-	// Check if new slug exists (collision check)
+	mock.ExpectBegin()
+	// Collision check now happens inside transaction
 	mock.ExpectQuery(regexp.QuoteMeta(store.existsQuery())).
 		WithArgs("new-awesome-title").
 		WillReturnRows(sqlmock.NewRows([]string{"1"})) // No collision
-
-	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM")).
 		WithArgs("old-slug").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -321,12 +326,11 @@ func TestSQLContentStore_UpdateSlugChange(t *testing.T) {
 		WithArgs("another-slug").
 		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(existingPayload2)))
 
-	// Check if custom slug exists (collision check)
+	mock.ExpectBegin()
+	// Collision check now happens inside transaction
 	mock.ExpectQuery(regexp.QuoteMeta(store.existsQuery())).
 		WithArgs("custom-slug").
 		WillReturnRows(sqlmock.NewRows([]string{"1"})) // No collision
-
-	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM")).
 		WithArgs("another-slug").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -358,9 +362,11 @@ func TestSQLContentStore_UpdateSlugChange(t *testing.T) {
 		WithArgs("stable-slug").
 		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(existingPayload3)))
 
+	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(store.updateQuery())).
 		WithArgs(jsonContains("\"category\""), false, "stable-slug").
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
 
 	newURL3, err := store.Update(ctx, "https://example.test/stable-slug", map[string][]any{"category": []any{"test"}}, nil, nil)
 	if err != nil {
@@ -369,6 +375,69 @@ func TestSQLContentStore_UpdateSlugChange(t *testing.T) {
 
 	if newURL3 != "https://example.test/stable-slug" {
 		t.Fatalf("expected URL to remain stable-slug, got %s", newURL3)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestSQLContentStore_UpdateSlugCollision(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to create mock: %v", err)
+	}
+	defer db.Close()
+
+	cfg := &config.SQLContentStrategy{
+		Driver:    "postgres",
+		DSN:       "mock",
+		PublicUrl: "https://example.test/",
+	}
+
+	store, err := newSQLContentStoreWithDB(cfg, db)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Original document
+	existing := util.Mf2Document{
+		Type:       []string{"h-entry"},
+		Properties: map[string][]any{"slug": []any{"old-slug"}, "name": []any{"Title"}},
+	}
+	existingPayload, _ := json.Marshal(existing)
+
+	// Setup: Update tries to use slug "new-slug" but it already exists
+	mock.ExpectQuery(regexp.QuoteMeta(store.selectQuery())).
+		WithArgs("old-slug").
+		WillReturnRows(sqlmock.NewRows([]string{"doc"}).AddRow(string(existingPayload)))
+
+	mock.ExpectBegin()
+	// First collision check: "new-slug" exists (returns a row)
+	mock.ExpectQuery(regexp.QuoteMeta(store.existsQuery())).
+		WithArgs("new-slug").
+		WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
+	// Second collision check: "new-slug-<uuid>" doesn't exist (no rows)
+	mock.ExpectQuery(regexp.QuoteMeta(store.existsQuery())).
+		WillReturnRows(sqlmock.NewRows([]string{"1"}))
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM")).
+		WithArgs("old-slug").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	// Insert should use the UUID-suffixed slug
+	mock.ExpectExec(regexp.QuoteMeta(store.insertQuery())).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	newURL, err := store.Update(ctx, "https://example.test/old-slug", map[string][]any{"slug": []any{"new-slug"}}, nil, nil)
+	if err != nil {
+		t.Fatalf("update with collision failed: %v", err)
+	}
+
+	// Verify the URL contains a UUID suffix due to collision
+	if !strings.HasPrefix(newURL, "https://example.test/new-slug-") {
+		t.Fatalf("expected URL to have UUID suffix, got %s", newURL)
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {

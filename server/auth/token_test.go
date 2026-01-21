@@ -10,6 +10,72 @@ import (
 	"github.com/indieinfra/scribble/config"
 )
 
+func TestExtractBearerToken(t *testing.T) {
+	cases := []struct {
+		name   string
+		value  string
+		expect string
+	}{
+		{name: "empty", value: "", expect: ""},
+		{name: "no scheme", value: "token", expect: ""},
+		{name: "wrong scheme", value: "Basic abc", expect: ""},
+		{name: "valid", value: "Bearer abc123", expect: "abc123"},
+		{name: "case insensitive", value: "bearer token", expect: "token"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ExtractBearerToken(tc.value); got != tc.expect {
+				t.Fatalf("ExtractBearerToken(%q) = %q, want %q", tc.value, got, tc.expect)
+			}
+		})
+	}
+}
+
+func TestPopAccessToken(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    map[string]any
+		expected string
+	}{
+		{
+			name:     "nil map",
+			input:    nil,
+			expected: "",
+		},
+		{
+			name:     "no token",
+			input:    map[string]any{"foo": "bar"},
+			expected: "",
+		},
+		{
+			name:     "string token",
+			input:    map[string]any{"access_token": "abc"},
+			expected: "abc",
+		},
+		{
+			name:     "slice token picks first string",
+			input:    map[string]any{"access_token": []any{"", "token2", "ignored"}},
+			expected: "token2",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := PopAccessToken(tc.input)
+			if got != tc.expected {
+				t.Fatalf("PopAccessToken() = %q, want %q", got, tc.expected)
+			}
+
+			if tc.input != nil {
+				if _, exists := tc.input["access_token"]; exists {
+					t.Fatalf("access_token key should be removed from input map")
+				}
+			}
+		})
+	}
+}
+
 func TestTokenDetailsString(t *testing.T) {
 	details := &TokenDetails{Me: "https://example.org", ClientId: "client", Scope: "create", IssuedAt: 10, Nonce: 5}
 	got := details.String()
@@ -60,7 +126,10 @@ func TestVerifyAccessToken_Success(t *testing.T) {
 
 	cfg := &config.Config{Micropub: config.Micropub{MeUrl: "https://example.org", TokenEndpoint: srv.URL}}
 
-	details := VerifyAccessToken(cfg, "ok")
+	details, err := VerifyAccessToken(cfg, "ok")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if details == nil {
 		t.Fatalf("expected token details, got nil")
 	}
@@ -77,7 +146,11 @@ func TestVerifyAccessToken_InvalidStatus(t *testing.T) {
 
 	cfg := &config.Config{Micropub: config.Micropub{MeUrl: "https://example.org", TokenEndpoint: srv.URL}}
 
-	if details := VerifyAccessToken(cfg, "bad"); details != nil {
+	details, err := VerifyAccessToken(cfg, "bad")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if details != nil {
 		t.Fatalf("expected nil details for invalid token")
 	}
 }
@@ -90,21 +163,25 @@ func TestVerifyAccessToken_MismatchedMe(t *testing.T) {
 
 	cfg := &config.Config{Micropub: config.Micropub{MeUrl: "https://example.org", TokenEndpoint: srv.URL}}
 
-	if details := VerifyAccessToken(cfg, "ok"); details != nil {
+	details, err := VerifyAccessToken(cfg, "ok")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if details != nil {
 		t.Fatalf("expected nil details when me does not match")
 	}
 }
 
-func TestVerifyAccessToken_PanicsOnEmptyToken(t *testing.T) {
+func TestVerifyAccessToken_ReturnsErrorOnEmptyToken(t *testing.T) {
 	cfg := &config.Config{Micropub: config.Micropub{TokenEndpoint: "https://example.org"}}
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatalf("expected panic for empty token")
-		}
-	}()
-
-	_ = VerifyAccessToken(cfg, "")
+	details, err := VerifyAccessToken(cfg, "")
+	if err != ErrEmptyToken {
+		t.Fatalf("expected ErrEmptyToken, got %v", err)
+	}
+	if details != nil {
+		t.Fatalf("expected nil details for empty token")
+	}
 }
 
 func TestAddAndGetToken(t *testing.T) {

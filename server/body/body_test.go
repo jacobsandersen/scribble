@@ -1,4 +1,4 @@
-package post
+package body
 
 import (
 	"bytes"
@@ -23,13 +23,13 @@ func testBodyConfig() *config.Config {
 	}
 }
 
-func TestReadJsonBodyInvalid(t *testing.T) {
+func TestReadJSONInvalid(t *testing.T) {
 	cfg := testBodyConfig()
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"invalid":`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	if got := readJsonBody(cfg, rr, req); got != nil {
+	if got := readJSON(cfg, rr, req); got != nil {
 		t.Fatalf("expected invalid JSON to return nil body")
 	}
 	if rr.Code != http.StatusBadRequest {
@@ -65,7 +65,7 @@ func TestReadBodyFormPopsAccessToken(t *testing.T) {
 	}
 }
 
-func TestReadFormUrlEncodedBodyLimitExceeded(t *testing.T) {
+func TestReadFormURLEncodedLimitExceeded(t *testing.T) {
 	cfg := testBodyConfig()
 	cfg.Server.Limits.MaxPayloadSize = 4
 
@@ -73,7 +73,7 @@ func TestReadFormUrlEncodedBodyLimitExceeded(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rr := httptest.NewRecorder()
 
-	if got := readFormUrlEncodedBody(cfg, rr, req); got != nil {
+	if got := readFormURLEncoded(cfg, rr, req); got != nil {
 		t.Fatalf("expected nil body when form exceeds limit")
 	}
 	if rr.Code != http.StatusBadRequest {
@@ -84,7 +84,7 @@ func TestReadFormUrlEncodedBodyLimitExceeded(t *testing.T) {
 	}
 }
 
-func TestReadMultipartBodySuccess(t *testing.T) {
+func TestReadMultipartSuccess(t *testing.T) {
 	cfg := testBodyConfig()
 
 	var buf bytes.Buffer
@@ -99,7 +99,7 @@ func TestReadMultipartBodySuccess(t *testing.T) {
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	rr := httptest.NewRecorder()
 
-	body, ok := readMultipartBody(cfg, rr, req)
+	body, ok := readMultipart(cfg, rr, req)
 	if !ok || body == nil {
 		t.Fatalf("expected multipart body to parse")
 	}
@@ -118,7 +118,7 @@ func TestReadMultipartBodySuccess(t *testing.T) {
 	body.Files[0].File.Close()
 }
 
-func TestReadMultipartBodyFileTooLarge(t *testing.T) {
+func TestReadMultipartFileTooLarge(t *testing.T) {
 	cfg := testBodyConfig()
 	cfg.Server.Limits.MaxFileSize = 1
 
@@ -132,7 +132,7 @@ func TestReadMultipartBodyFileTooLarge(t *testing.T) {
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	rr := httptest.NewRecorder()
 
-	if body, ok := readMultipartBody(cfg, rr, req); ok || body != nil {
+	if body, ok := readMultipart(cfg, rr, req); ok || body != nil {
 		t.Fatalf("expected multipart parsing to fail for large file")
 	}
 	if rr.Code != http.StatusBadRequest {

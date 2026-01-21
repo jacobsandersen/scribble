@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/server/util"
+	storageutil "github.com/indieinfra/scribble/storage/util"
 )
 
 type GitContentStore struct {
@@ -68,7 +69,7 @@ func NewGitContentStore(cfg *config.GitContentStrategy) (*GitContentStore, error
 		auth:      &auth,
 		repo:      repo,
 		tmpDir:    tmpDir,
-		publicURL: normalizeBaseURL(cfg.PublicUrl),
+		publicURL: storageutil.NormalizeBaseURL(cfg.PublicUrl),
 	}, nil
 }
 
@@ -323,28 +324,41 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 		return url, fmt.Errorf("failed to get worktree: %w", err)
 	}
 
-	// If slug changed, rename the file
-	// At this point, we've already verified the slug doesn't collide
+	// If slug changed, use single atomic commit with both operations.
+	// This ensures clean git history and avoids intermediate inconsistent states.
+	// If push fails, we roll back the commit to prevent data loss.
 	if newSlug != oldSlug {
-		// Write to new file
+		// Write new file
 		if err = os.WriteFile(newFullPath, jsonBytes, 0644); err != nil {
 			return url, fmt.Errorf("failed to write new file: %w", err)
 		}
 
-		// Remove old file
+		// Remove old file from filesystem
 		if err = os.Remove(oldFullPath); err != nil {
+			// Failed to remove old file - clean up new file we just wrote
+			_ = os.Remove(newFullPath)
 			return url, fmt.Errorf("failed to remove old file: %w", err)
 		}
 
-		// Stage both operations
+		// Stage new file
 		if _, err = wt.Add(newRelPath); err != nil {
-			return url, fmt.Errorf("failed to add new file to git: %w", err)
+			// Failed to stage new file - restore working directory from HEAD
+			if cleanErr := cs.resetToHead(wt); cleanErr != nil {
+				return url, fmt.Errorf("failed to stage new file and failed to restore from HEAD: stage_error=%w, restore_error=%v", err, cleanErr)
+			}
+			return url, fmt.Errorf("failed to stage new file (restored from HEAD): %w", err)
 		}
 
+		// Stage removal of old file
 		if _, err = wt.Remove(oldRelPath); err != nil {
-			return url, fmt.Errorf("failed to remove old file from git: %w", err)
+			// Failed to stage removal - restore working directory from HEAD
+			if cleanErr := cs.resetToHead(wt); cleanErr != nil {
+				return url, fmt.Errorf("failed to stage removal and failed to restore from HEAD: stage_error=%w, restore_error=%v", err, cleanErr)
+			}
+			return url, fmt.Errorf("failed to stage removal (restored from HEAD): %w", err)
 		}
 
+		// Create single atomic commit with both operations
 		_, err = wt.Commit(fmt.Sprintf("scribble(update): rename %v to %v", oldSlug, newSlug), &git.CommitOptions{
 			Author: &object.Signature{
 				Name:  "scribble",
@@ -352,6 +366,27 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 				When:  time.Now(),
 			},
 		})
+		if err != nil {
+			// Commit failed - clean up staged changes and restore working directory
+			if resetErr := cs.resetToHead(wt); resetErr != nil {
+				return url, fmt.Errorf("failed to create commit and failed to clean up staged changes: commit_error=%w, reset_error=%v", err, resetErr)
+			}
+			return url, fmt.Errorf("failed to create commit (changes reverted): %w", err)
+		}
+
+		// Push commit to remote
+		if err := cs.repo.PushContext(ctx, &git.PushOptions{Auth: *cs.auth}); err != nil {
+			// Push failed - roll back the commit to restore original state
+			// This prevents data loss by ensuring we don't have unpushed local changes
+			if resetErr := cs.rollbackLastCommit(); resetErr != nil {
+				// Reset failed - reinitialize repo to get back to clean remote state
+				if reinitErr := cs.reinit(); reinitErr != nil {
+					return url, fmt.Errorf("failed to push, rollback failed, and reinit failed (data preserved on remote): push_error=%w, rollback_error=%v, reinit_error=%v", err, resetErr, reinitErr)
+				}
+				return url, fmt.Errorf("failed to push, rolled back via reinit (data preserved on remote): %w", err)
+			}
+			return url, fmt.Errorf("failed to push, rolled back successfully (no changes made): %w", err)
+		}
 	} else {
 		// No slug change, just update in place
 		if err = os.WriteFile(oldFullPath, jsonBytes, 0644); err != nil {
@@ -359,7 +394,11 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 		}
 
 		if _, err = wt.Add(oldRelPath); err != nil {
-			return url, fmt.Errorf("failed to add file to git: %w", err)
+			// Failed to stage - restore file from HEAD
+			if cleanErr := cs.resetToHead(wt); cleanErr != nil {
+				return url, fmt.Errorf("failed to stage file and failed to restore from HEAD: stage_error=%w, restore_error=%v", err, cleanErr)
+			}
+			return url, fmt.Errorf("failed to stage file (restored from HEAD): %w", err)
 		}
 
 		_, err = wt.Commit(fmt.Sprintf("scribble(update): update content entry: %v", oldSlug), &git.CommitOptions{
@@ -369,14 +408,26 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 				When:  time.Now(),
 			},
 		})
-	}
+		if err != nil {
+			// Commit failed - clean up staged changes and restore working directory
+			if resetErr := cs.resetToHead(wt); resetErr != nil {
+				return url, fmt.Errorf("failed to create commit and failed to clean up staged changes: commit_error=%w, reset_error=%v", err, resetErr)
+			}
+			return url, fmt.Errorf("failed to create commit (changes reverted): %w", err)
+		}
 
-	if err != nil {
-		return url, fmt.Errorf("failed to create commit: %w", err)
-	}
-
-	if err := cs.repo.PushContext(ctx, &git.PushOptions{Auth: *cs.auth}); err != nil {
-		return url, fmt.Errorf("failed to push local: %w", err)
+		// Push commit to remote
+		if err := cs.repo.PushContext(ctx, &git.PushOptions{Auth: *cs.auth}); err != nil {
+			// Push failed - roll back the commit to restore original state
+			if resetErr := cs.rollbackLastCommit(); resetErr != nil {
+				// Reset failed - reinitialize repo to get back to clean remote state
+				if reinitErr := cs.reinit(); reinitErr != nil {
+					return url, fmt.Errorf("failed to push, rollback failed, and reinit failed (data preserved on remote): push_error=%w, rollback_error=%v, reinit_error=%v", err, resetErr, reinitErr)
+				}
+				return url, fmt.Errorf("failed to push, rolled back via reinit (data preserved on remote): %w", err)
+			}
+			return url, fmt.Errorf("failed to push, rolled back successfully (no changes made): %w", err)
+		}
 	}
 
 	return cs.publicURL + newSlug, nil
@@ -614,4 +665,76 @@ func (cs *GitContentStore) existsBySlugUnlocked(slug string) (bool, error) {
 
 	// err may be nil, meaning simply not found
 	return false, err
+}
+
+// rollbackLastCommit performs a hard reset to undo the last commit.
+// This is used when a push fails to restore the repository to its pre-commit state.
+// Returns an error if the reset fails.
+func (cs *GitContentStore) rollbackLastCommit() error {
+	wt, err := cs.repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree for rollback: %w", err)
+	}
+
+	// Get the current HEAD
+	ref, err := cs.repo.Head()
+	if err != nil {
+		return fmt.Errorf("failed to get HEAD for rollback: %w", err)
+	}
+
+	// Get the commit object
+	commit, err := cs.repo.CommitObject(ref.Hash())
+	if err != nil {
+		return fmt.Errorf("failed to get commit object for rollback: %w", err)
+	}
+
+	// Get parent commit (HEAD~1)
+	if commit.NumParents() == 0 {
+		return fmt.Errorf("cannot rollback: commit has no parent")
+	}
+
+	parentCommit, err := commit.Parent(0)
+	if err != nil {
+		return fmt.Errorf("failed to get parent commit for rollback: %w", err)
+	}
+
+	// Hard reset to parent commit
+	err = wt.Reset(&git.ResetOptions{
+		Commit: parentCommit.Hash,
+		Mode:   git.HardReset,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to reset to parent commit: %w", err)
+	}
+
+	return nil
+}
+
+// resetToHead performs a hard reset to HEAD, discarding all staged changes and
+// restoring the working directory to match the current commit.
+// If reset fails, attempts to reinit the repository from remote as a last resort.
+// This is used to clean up after failed commit or staging operations.
+func (cs *GitContentStore) resetToHead(wt *git.Worktree) error {
+	ref, err := cs.repo.Head()
+	if err != nil {
+		// Can't get HEAD - reinit to get back to clean remote state
+		if reinitErr := cs.reinit(); reinitErr != nil {
+			return fmt.Errorf("failed to get HEAD and failed to reinit: head_error=%w, reinit_error=%v", err, reinitErr)
+		}
+		return fmt.Errorf("failed to get HEAD, reinitialized from remote: %w", err)
+	}
+
+	err = wt.Reset(&git.ResetOptions{
+		Commit: ref.Hash(),
+		Mode:   git.HardReset,
+	})
+	if err != nil {
+		// Reset failed - reinit to get back to clean remote state
+		if reinitErr := cs.reinit(); reinitErr != nil {
+			return fmt.Errorf("failed to reset to HEAD and failed to reinit: reset_error=%w, reinit_error=%v", err, reinitErr)
+		}
+		return fmt.Errorf("failed to reset to HEAD, reinitialized from remote: %w", err)
+	}
+
+	return nil
 }

@@ -56,17 +56,16 @@ func (cs *NoopContentStore) Undelete(ctx context.Context, url string) (string, b
 	return url, false, nil
 }
 
-func (cs *NoopContentStore) Get(ctx context.Context, url string) (*ContentObject, error) {
+func (cs *NoopContentStore) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
 	log.Println("Received no-op get-content request - dumping request information and generating bogus response")
 	log.Printf("Url: %v", url)
-	return &ContentObject{
-		Url:  url,
+	return &util.Mf2Document{
 		Type: []string{"h-entry"},
 		Properties: map[string][]any{
 			"name":    {"This is a bogus title"},
 			"content": {"This is bogus content, sentence one", "sentence two!"},
+			"url":     {url},
 		},
-		Deleted: false,
 	}, nil
 }
 

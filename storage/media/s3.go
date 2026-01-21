@@ -41,7 +41,7 @@ type S3MediaStore struct {
 
 func NewS3MediaStore(cfg *config.Media) (*S3MediaStore, error) {
 	if cfg == nil || cfg.S3 == nil {
-		return nil, fmt.Errorf("s3 config is required")
+		return nil, fmt.Errorf("s3 media config is nil")
 	}
 
 	s3cfg := cfg.S3

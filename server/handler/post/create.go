@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/server/auth"
+	"github.com/indieinfra/scribble/server/body"
 	"github.com/indieinfra/scribble/server/handler/common"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
@@ -18,20 +19,20 @@ import (
 	"github.com/indieinfra/scribble/storage/content"
 )
 
-func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, body *ParsedBody) {
+func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb *body.ParsedBody) {
 	if !requireScope(w, r, auth.ScopeCreate) {
 		return
 	}
 
 	ct, _ := util.ExtractMediaType(w, r)
 
-	document, err := buildDocument(ct, body.Data)
+	document, err := buildDocument(ct, pb.Data)
 	if err != nil {
 		resp.WriteInvalidRequest(w, err.Error())
 		return
 	}
 
-	for _, pf := range body.Files {
+	for _, pf := range pb.Files {
 		if pf.Header == nil || pf.File == nil {
 			continue
 		}

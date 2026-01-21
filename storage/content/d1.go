@@ -12,6 +12,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v6/option"
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/server/util"
+	storageutil "github.com/indieinfra/scribble/storage/util"
 )
 
 // D1ContentStore implements ContentStore using Cloudflare D1 via the HTTP API.
@@ -36,7 +37,7 @@ func NewD1ContentStore(cfg *config.D1ContentStrategy) (*D1ContentStore, error) {
 		cfg:       cfg,
 		client:    client,
 		table:     table,
-		publicURL: normalizeBaseURL(cfg.PublicUrl),
+		publicURL: storageutil.NormalizeBaseURL(cfg.PublicUrl),
 	}
 
 	if err := store.initSchema(context.Background()); err != nil {
@@ -60,7 +61,7 @@ func newD1ContentStoreWithClient(cfg *config.D1ContentStrategy, client *http.Cli
 		cfg:       cfg,
 		client:    cfClient,
 		table:     table,
-		publicURL: normalizeBaseURL(cfg.PublicUrl),
+		publicURL: storageutil.NormalizeBaseURL(cfg.PublicUrl),
 	}
 
 	if err := store.initSchema(context.Background()); err != nil {
@@ -202,22 +203,40 @@ func (cs *D1ContentStore) Update(ctx context.Context, url string, replacements m
 
 	newURL := cs.publicURL + newSlug
 
-	// If slug changed, we need to delete the old row and insert a new one
-	// D1 doesn't support full transactions, but we've already checked for slug collision
-	// above, so the INSERT should not fail on primary key constraint.
-	// Execute queries sequentially for best-effort atomicity.
+	// If slug changed, we need to insert the new row first, then delete the old one.
+	// D1 doesn't support full transactions, so we simulate atomicity with manual rollback:
+	// 1. INSERT the new row (collision already checked above)
+	// 2. Verify the new row exists
+	// 3. DELETE the old row
+	// 4. If DELETE fails, DELETE the new row (rollback) to restore original state
 	if newSlug != oldSlug {
 		deleteQuery := fmt.Sprintf("DELETE FROM %s WHERE slug = ?", cs.table)
-		queries := []struct {
-			sql    string
-			params []any
-		}{
-			{sql: deleteQuery, params: []any{oldSlug}},
-			{sql: cs.insertQuery(), params: []any{newSlug, newURL, string(payload), deletedFlag(doc)}},
+
+		// Step 1: Insert new row
+		if _, err := cs.executeQuery(ctx, cs.insertQuery(), []any{newSlug, newURL, string(payload), deletedFlag(doc)}); err != nil {
+			return url, fmt.Errorf("failed to insert new row for slug change: %w", err)
 		}
 
-		if err := cs.executeBatch(ctx, queries); err != nil {
-			return url, err
+		// Step 2: Verify new row exists
+		exists, err := cs.ExistsBySlug(ctx, newSlug)
+		if err != nil {
+			// Attempt rollback: delete the new row we just inserted
+			_, _ = cs.executeQuery(ctx, deleteQuery, []any{newSlug})
+			return url, fmt.Errorf("failed to verify new row after insert: %w", err)
+		}
+		if !exists {
+			// Attempt rollback: delete the new row (though it wasn't found)
+			_, _ = cs.executeQuery(ctx, deleteQuery, []any{newSlug})
+			return url, fmt.Errorf("new row not found after insert, refusing to proceed")
+		}
+
+		// Step 3: Delete old row
+		if _, err := cs.executeQuery(ctx, deleteQuery, []any{oldSlug}); err != nil {
+			// ROLLBACK: Delete the new row to restore original state
+			if _, rbErr := cs.executeQuery(ctx, deleteQuery, []any{newSlug}); rbErr != nil {
+				return url, fmt.Errorf("failed to delete old row and rollback failed (system inconsistent): delete_error=%w, rollback_error=%v", err, rbErr)
+			}
+			return url, fmt.Errorf("failed to delete old row (rolled back successfully): %w", err)
 		}
 	} else {
 		// No slug change, just update in place

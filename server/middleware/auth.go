@@ -11,19 +11,6 @@ import (
 	"github.com/indieinfra/scribble/server/util"
 )
 
-func extractBearerHeader(auth string) string {
-	if auth == "" {
-		return ""
-	}
-
-	scheme, token, ok := strings.Cut(auth, " ")
-	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return ""
-	}
-
-	return token
-}
-
 // function ValidateTokenMiddleware wraps a downstream handler. At execution time,
 // it extracts a Bearer token from the Authorization header, if any. If the Authorization
 // header is not present, or does not contain a Bearer token, it aborts the request.
@@ -31,8 +18,7 @@ func extractBearerHeader(auth string) string {
 // http request to the defined token endpoint to validate the token.
 func ValidateTokenMiddleware(cfg *config.Config, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var token string
-		token = extractBearerHeader(r.Header.Get("Authorization"))
+		token := auth.ExtractBearerToken(r.Header.Get("Authorization"))
 
 		token = strings.TrimSpace(token)
 		if token == "" {
@@ -45,7 +31,12 @@ func ValidateTokenMiddleware(cfg *config.Config, next http.Handler) http.Handler
 			return
 		}
 
-		details := auth.VerifyAccessToken(cfg, token)
+		details, err := auth.VerifyAccessToken(cfg, token)
+		if err != nil {
+			log.Printf("error verifying access token: %v", err)
+			resp.WriteInternalServerError(w, "Failed to verify token")
+			return
+		}
 		if details == nil {
 			resp.WriteForbidden(w, "Token validation failed")
 			return
@@ -71,7 +62,12 @@ func EnsureTokenForRequest(cfg *config.Config, w http.ResponseWriter, r *http.Re
 		return nil, false
 	}
 
-	details := auth.VerifyAccessToken(cfg, token)
+	details, err := auth.VerifyAccessToken(cfg, token)
+	if err != nil {
+		log.Printf("error verifying access token: %v", err)
+		resp.WriteInternalServerError(w, "Failed to verify token")
+		return nil, false
+	}
 	if details == nil {
 		resp.WriteForbidden(w, "Token validation failed")
 		return nil, false

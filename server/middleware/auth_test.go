@@ -10,28 +10,6 @@ import (
 	"github.com/indieinfra/scribble/server/auth"
 )
 
-func TestExtractBearerHeader(t *testing.T) {
-	cases := []struct {
-		name   string
-		value  string
-		expect string
-	}{
-		{name: "empty", value: "", expect: ""},
-		{name: "no scheme", value: "token", expect: ""},
-		{name: "wrong scheme", value: "Basic abc", expect: ""},
-		{name: "valid", value: "Bearer abc123", expect: "abc123"},
-		{name: "case insensitive", value: "bearer token", expect: "token"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := extractBearerHeader(tc.value); got != tc.expect {
-				t.Fatalf("extractBearerHeader(%q) = %q, want %q", tc.value, got, tc.expect)
-			}
-		})
-	}
-}
-
 func TestValidateTokenMiddleware_MissingTokenOnGet(t *testing.T) {
 	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

@@ -1,4 +1,4 @@
-package post
+package body
 
 import (
 	"encoding/json"
@@ -7,22 +7,29 @@ import (
 	"net/http"
 
 	"github.com/indieinfra/scribble/config"
+	"github.com/indieinfra/scribble/server/auth"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/util"
 )
 
+// ParsedBody represents the parsed content from an HTTP request body,
+// including data fields, uploaded files, and access token (if present in body).
 type ParsedBody struct {
 	Data        map[string]any
 	Files       []ParsedFile
 	AccessToken string
 }
 
+// ParsedFile represents a file uploaded as part of a multipart request.
 type ParsedFile struct {
 	File   multipart.File
 	Header *multipart.FileHeader
 	Field  string
 }
 
+// ReadBody parses the request body based on content type (JSON, form-urlencoded, or multipart).
+// Returns the parsed body and true on success, or nil and false on failure.
+// Writes appropriate error responses directly to the ResponseWriter on failure.
 func ReadBody(cfg *config.Config, w http.ResponseWriter, r *http.Request) (*ParsedBody, bool) {
 	_, contentType, ok := util.RequireValidMicropubContentType(w, r)
 	if !ok {
@@ -31,19 +38,27 @@ func ReadBody(cfg *config.Config, w http.ResponseWriter, r *http.Request) (*Pars
 
 	switch contentType {
 	case "application/json":
-		return &ParsedBody{Data: readJsonBody(cfg, w, r)}, true
+		data := readJSON(cfg, w, r)
+		if data == nil {
+			return nil, false
+		}
+		return &ParsedBody{Data: data}, true
 	case "application/x-www-form-urlencoded":
-		body := readFormUrlEncodedBody(cfg, w, r)
-		token := util.PopAccessToken(body)
-		return &ParsedBody{Data: body, AccessToken: token}, true
+		data := readFormURLEncoded(cfg, w, r)
+		if data == nil {
+			return nil, false
+		}
+		token := auth.PopAccessToken(data)
+		return &ParsedBody{Data: data, AccessToken: token}, true
 	case "multipart/form-data":
-		return readMultipartBody(cfg, w, r)
+		return readMultipart(cfg, w, r)
 	}
 
 	return nil, false
 }
 
-func readJsonBody(cfg *config.Config, w http.ResponseWriter, r *http.Request) map[string]any {
+// readJSON parses a JSON request body.
+func readJSON(cfg *config.Config, w http.ResponseWriter, r *http.Request) map[string]any {
 	out := make(map[string]any)
 
 	r.Body = http.MaxBytesReader(w, r.Body, int64(cfg.Server.Limits.MaxPayloadSize))
@@ -55,7 +70,8 @@ func readJsonBody(cfg *config.Config, w http.ResponseWriter, r *http.Request) ma
 	return out
 }
 
-func readFormUrlEncodedBody(cfg *config.Config, w http.ResponseWriter, r *http.Request) map[string]any {
+// readFormURLEncoded parses an application/x-www-form-urlencoded request body.
+func readFormURLEncoded(cfg *config.Config, w http.ResponseWriter, r *http.Request) map[string]any {
 	out := make(map[string]any)
 
 	r.Body = http.MaxBytesReader(w, r.Body, int64(cfg.Server.Limits.MaxPayloadSize))
@@ -82,7 +98,9 @@ func readFormUrlEncodedBody(cfg *config.Config, w http.ResponseWriter, r *http.R
 	return out
 }
 
-func readMultipartBody(cfg *config.Config, w http.ResponseWriter, r *http.Request) (*ParsedBody, bool) {
+// readMultipart parses a multipart/form-data request body, extracting both
+// form fields and uploaded files.
+func readMultipart(cfg *config.Config, w http.ResponseWriter, r *http.Request) (*ParsedBody, bool) {
 	maxMemory := int64(cfg.Server.Limits.MaxMultipartMem)
 	maxFile := int64(cfg.Server.Limits.MaxFileSize)
 	fields := []string{"photo", "video", "audio", "file"}
@@ -91,7 +109,7 @@ func readMultipartBody(cfg *config.Config, w http.ResponseWriter, r *http.Reques
 		return nil, false
 	}
 
-	token := util.PopAccessToken(values)
+	token := auth.PopAccessToken(values)
 
 	parsedFiles := make([]ParsedFile, 0, len(files))
 	for _, f := range files {

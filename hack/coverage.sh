@@ -17,9 +17,17 @@ echo "==> computing package list"
 PKGS=$(go list ./...)
 
 echo "Packages under coverage:" $PKGS
-echo "==> go test with coverage"
+
+# Include testcontainers by default; allow opt-out locally via SKIP_TESTCONTAINERS=1
+GO_TEST_TAGS="-tags=testcontainers"
+if [[ "${SKIP_TESTCONTAINERS:-}" == "1" ]]; then
+  echo "SKIP_TESTCONTAINERS=1 set; running without testcontainers tag"
+  GO_TEST_TAGS=""
+fi
+
+echo "==> go test with coverage (${GO_TEST_TAGS:-no tags})"
 # Use per-package coverage (no cross-package -coverpkg) to match `go test ./... -coverprofile` output.
-go test ./... -coverprofile="$COVER_PROFILE" -covermode=atomic
+go test ${GO_TEST_TAGS} ./... -coverprofile="$COVER_PROFILE" -covermode=atomic
 
 echo "==> coverage summary"
 go tool cover -func="$COVER_PROFILE" | tee "$COVER_FUNC"

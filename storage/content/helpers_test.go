@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/indieinfra/scribble/server/util"
+	storageutil "github.com/indieinfra/scribble/storage/util"
 )
 
 func TestDeleteValuesAndContains(t *testing.T) {
@@ -78,8 +79,8 @@ func TestNormalizeBaseURL(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		if got := normalizeBaseURL(tc.in); got != tc.want {
-			t.Fatalf("normalizeBaseURL(%q) = %q, want %q", tc.in, got, tc.want)
+		if got := storageutil.NormalizeBaseURL(tc.in); got != tc.want {
+			t.Fatalf("storageutil.NormalizeBaseURL(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 }
