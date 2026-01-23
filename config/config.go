@@ -1,6 +1,8 @@
 package config
 
 import (
+	"errors"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
@@ -21,11 +23,15 @@ func (c *Config) Validate() error {
 
 func LoadConfig(file string) (*Config, error) {
 	v := viper.New()
+	v.AutomaticEnv()
 	v.SetConfigFile(file)
 	v.SetConfigType("yaml")
 
 	if err := v.ReadInConfig(); err != nil {
-		return nil, err
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFoundError) {
+			return nil, err
+		}
 	}
 
 	var cfg Config

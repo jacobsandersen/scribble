@@ -1,10 +1,8 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/server"
@@ -14,16 +12,9 @@ func main() {
 	log.SetPrefix("scribble: ")
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile | log.Lmsgprefix)
 
-	configFile := flag.String("config", "config.yml", "Path to the configuration file (i.e., /etc/scribble.yaml)")
-	flag.Parse()
-
-	if len(strings.Trim(*configFile, " ")) == 0 {
-		flag.Usage()
-		os.Exit(1)
-	}
-
 	log.Println("loading configuration...")
-	cfg, err := config.LoadConfig(*configFile)
+	configFile := os.Getenv("CONFIG_FILE")
+	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
 		log.Fatalf("failed to load configuration: %v", err)
 		return
