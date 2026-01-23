@@ -11,7 +11,7 @@ import (
 	"github.com/indieinfra/scribble/server/util"
 )
 
-// function ValidateTokenMiddleware wraps a downstream handler. At execution time,
+// ValidateTokenMiddleware wraps a downstream handler. At execution time,
 // it extracts a Bearer token from the Authorization header, if any. If the Authorization
 // header is not present, or does not contain a Bearer token, it aborts the request.
 // If the token is present, it performs the VerifyAccessToken routine which makes a downstream

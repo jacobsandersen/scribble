@@ -8,6 +8,6 @@ import (
 
 type ScribbleState struct {
 	Cfg          *config.Config
-	ContentStore content.ContentStore
-	MediaStore   media.MediaStore
+	ContentStore content.Store
+	MediaStore   media.Store
 }

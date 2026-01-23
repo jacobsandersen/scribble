@@ -1,4 +1,4 @@
-package content
+package filesystem
 
 import (
 	"context"
@@ -14,11 +14,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/server/util"
+	"github.com/indieinfra/scribble/storage/content"
 	storageutil "github.com/indieinfra/scribble/storage/util"
 )
 
-// FilesystemContentStore stores mf2 documents as JSON files in a local directory.
-type FilesystemContentStore struct {
+// StoreImpl stores mf2 documents as JSON files in a local directory.
+type StoreImpl struct {
 	cfg        *config.FilesystemContentStrategy
 	basePath   string
 	publicURL  string
@@ -29,7 +30,7 @@ type FilesystemContentStore struct {
 }
 
 // NewFilesystemContentStore creates a new filesystem-based content store.
-func NewFilesystemContentStore(cfg *config.FilesystemContentStrategy) (*FilesystemContentStore, error) {
+func NewFilesystemContentStore(cfg *config.FilesystemContentStrategy) (*StoreImpl, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("filesystem content config is nil")
 	}
@@ -45,7 +46,7 @@ func NewFilesystemContentStore(cfg *config.FilesystemContentStrategy) (*Filesyst
 		pattern = storageutil.NewPathPattern(cfg.PathPattern)
 	}
 
-	store := &FilesystemContentStore{
+	store := &StoreImpl{
 		cfg:        cfg,
 		basePath:   cfg.Path,
 		publicURL:  storageutil.NormalizeBaseURL(cfg.PublicUrl),
@@ -63,7 +64,7 @@ func NewFilesystemContentStore(cfg *config.FilesystemContentStrategy) (*Filesyst
 }
 
 // rebuildIndex scans the filesystem and builds the slug-to-path index.
-func (fs *FilesystemContentStore) rebuildIndex() error {
+func (fs *StoreImpl) rebuildIndex() error {
 	fs.slugToPath = make(map[string]string)
 	fs.pathToSlug = make(map[string]string)
 
@@ -94,7 +95,7 @@ func (fs *FilesystemContentStore) rebuildIndex() error {
 			return nil
 		}
 
-		slug, err := extractSlug(doc)
+		slug, err := content.ExtractSlug(doc)
 		if err != nil {
 			log.Printf("warning: no slug in %s during index rebuild: %v", relPath, err)
 			return nil
@@ -107,11 +108,11 @@ func (fs *FilesystemContentStore) rebuildIndex() error {
 	})
 }
 
-func (fs *FilesystemContentStore) Create(ctx context.Context, doc util.Mf2Document) (string, bool, error) {
+func (fs *StoreImpl) Create(ctx context.Context, doc util.Mf2Document) (string, bool, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	slug, err := extractSlug(doc)
+	slug, err := content.ExtractSlug(doc)
 	if err != nil {
 		return "", false, err
 	}
@@ -158,7 +159,7 @@ func (fs *FilesystemContentStore) Create(ctx context.Context, doc util.Mf2Docume
 	return fs.publicURL + uniqueSlug, true, nil
 }
 
-func (fs *FilesystemContentStore) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
+func (fs *StoreImpl) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -169,7 +170,7 @@ func (fs *FilesystemContentStore) Update(ctx context.Context, url string, replac
 
 	oldPath, exists := fs.slugToPath[oldSlug]
 	if !exists {
-		return url, ErrNotFound
+		return url, content.ErrNotFound
 	}
 
 	absOldPath := filepath.Join(fs.basePath, oldPath)
@@ -178,7 +179,7 @@ func (fs *FilesystemContentStore) Update(ctx context.Context, url string, replac
 	data, err := os.ReadFile(absOldPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return url, ErrNotFound
+			return url, content.ErrNotFound
 		}
 		return url, err
 	}
@@ -189,12 +190,12 @@ func (fs *FilesystemContentStore) Update(ctx context.Context, url string, replac
 	}
 
 	// Apply mutations
-	applyMutations(&doc, replacements, additions, deletions)
+	content.ApplyMutations(&doc, replacements, additions, deletions)
 
 	// Check if slug needs recomputation
 	var newSlug string
-	if shouldRecomputeSlug(replacements, additions) {
-		proposedSlug, err := computeNewSlug(&doc, replacements)
+	if content.ShouldRecomputeSlug(replacements, additions) {
+		proposedSlug, err := content.ComputeNewSlug(&doc, replacements)
 		if err != nil {
 			return url, err
 		}
@@ -262,17 +263,17 @@ func (fs *FilesystemContentStore) Update(ctx context.Context, url string, replac
 	return url, nil
 }
 
-func (fs *FilesystemContentStore) Delete(ctx context.Context, url string) error {
+func (fs *StoreImpl) Delete(ctx context.Context, url string) error {
 	_, err := fs.setDeletedStatus(ctx, url, true)
 	return err
 }
 
-func (fs *FilesystemContentStore) Undelete(ctx context.Context, url string) (string, bool, error) {
+func (fs *StoreImpl) Undelete(ctx context.Context, url string) (string, bool, error) {
 	newURL, err := fs.setDeletedStatus(ctx, url, false)
 	return newURL, false, err
 }
 
-func (fs *FilesystemContentStore) setDeletedStatus(ctx context.Context, url string, deleted bool) (string, error) {
+func (fs *StoreImpl) setDeletedStatus(ctx context.Context, url string, deleted bool) (string, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -283,7 +284,7 @@ func (fs *FilesystemContentStore) setDeletedStatus(ctx context.Context, url stri
 
 	relPath, exists := fs.slugToPath[slug]
 	if !exists {
-		return url, ErrNotFound
+		return url, content.ErrNotFound
 	}
 
 	absPath := filepath.Join(fs.basePath, relPath)
@@ -318,7 +319,7 @@ func (fs *FilesystemContentStore) setDeletedStatus(ctx context.Context, url stri
 	return fs.publicURL + slug, nil
 }
 
-func (fs *FilesystemContentStore) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
+func (fs *StoreImpl) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 
@@ -329,7 +330,7 @@ func (fs *FilesystemContentStore) Get(ctx context.Context, url string) (*util.Mf
 
 	relPath, exists := fs.slugToPath[slug]
 	if !exists {
-		return nil, ErrNotFound
+		return nil, content.ErrNotFound
 	}
 
 	absPath := filepath.Join(fs.basePath, relPath)
@@ -337,7 +338,7 @@ func (fs *FilesystemContentStore) Get(ctx context.Context, url string) (*util.Mf
 	data, err := os.ReadFile(absPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, ErrNotFound
+			return nil, content.ErrNotFound
 		}
 		return nil, err
 	}
@@ -350,7 +351,7 @@ func (fs *FilesystemContentStore) Get(ctx context.Context, url string) (*util.Mf
 	return &doc, nil
 }
 
-func (fs *FilesystemContentStore) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
+func (fs *StoreImpl) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 	return fs.existsBySlugUnlocked(slug), nil
@@ -358,7 +359,7 @@ func (fs *FilesystemContentStore) ExistsBySlug(ctx context.Context, slug string)
 
 // existsBySlugUnlocked checks if a slug exists WITHOUT acquiring the mutex.
 // Must be called only when the caller already holds the mutex (read or write lock).
-func (fs *FilesystemContentStore) existsBySlugUnlocked(slug string) bool {
+func (fs *StoreImpl) existsBySlugUnlocked(slug string) bool {
 	_, exists := fs.slugToPath[slug]
 	return exists
 }
@@ -366,7 +367,7 @@ func (fs *FilesystemContentStore) existsBySlugUnlocked(slug string) bool {
 // ensureUniqueSlugUnlocked checks if the proposed slug already exists (excluding the old slug).
 // If it does, appends a UUID suffix to make it unique. Returns the final unique slug.
 // Must be called only when the caller already holds the mutex (write lock).
-func (fs *FilesystemContentStore) ensureUniqueSlugUnlocked(proposedSlug, oldSlug string) (string, error) {
+func (fs *StoreImpl) ensureUniqueSlugUnlocked(proposedSlug, oldSlug string) (string, error) {
 	// If the slug didn't actually change, no collision possible
 	if proposedSlug == oldSlug {
 		return proposedSlug, nil

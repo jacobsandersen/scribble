@@ -54,11 +54,8 @@ Content Storage Backends
 - **PostgreSQL/MySQL** - Store in a relational database
 - **Cloudflare D1** - Serverless edge database
 - **Local filesystem** - Simple file-based storage with flexible path patterns
-- ~~SFTP server~~ (planned)
-- ~~HTTP forwarding~~ (planned)
 
 Media Storage Backends
 ----------------------
 - **S3-compatible** - AWS S3, Cloudflare R2, MinIO, Backblaze B2, etc.
 - **Local filesystem** - Store files locally with date-based organization
-- ~~SFTP server~~ (planned)

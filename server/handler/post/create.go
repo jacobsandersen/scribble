@@ -74,19 +74,6 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 	}
 }
 
-func deriveSuggestedSlug(doc *util.Mf2Document) string {
-	suggestedSlug := processMpProperties(doc)
-	if suggestedSlug != "" {
-		return suggestedSlug
-	}
-
-	if generated := util.GenerateSlug(*doc); generated != "" {
-		return generated
-	}
-
-	return uuid.NewString()
-}
-
 func buildDocument(contentType string, data map[string]any) (util.Mf2Document, error) {
 	var doc util.Mf2Document
 
@@ -110,7 +97,20 @@ func buildDocument(contentType string, data map[string]any) (util.Mf2Document, e
 	return doc, nil
 }
 
-func ensureUniqueSlug(ctx context.Context, store content.ContentStore, slug string) (string, error) {
+func deriveSuggestedSlug(doc *util.Mf2Document) string {
+	suggestedSlug := processMpProperties(doc)
+	if suggestedSlug != "" {
+		return suggestedSlug
+	}
+
+	if generated := util.GenerateSlug(*doc); generated != "" {
+		return generated
+	}
+
+	return uuid.NewString()
+}
+
+func ensureUniqueSlug(ctx context.Context, store content.Store, slug string) (string, error) {
 	exists, err := store.ExistsBySlug(ctx, slug)
 	if err != nil {
 		return "", err
@@ -130,7 +130,7 @@ func ensureUniqueSlug(ctx context.Context, store content.ContentStore, slug stri
 func normalizeJson(input map[string]any) util.Mf2Document {
 	doc := util.Mf2Document{
 		Type:       []string{"h-entry"},
-		Properties: content.MicropubProperties{},
+		Properties: util.MicroformatProperties{},
 	}
 
 	if rawType, ok := input["type"]; ok {
@@ -206,7 +206,7 @@ func normalizeJsonArray(arr []any) []any {
 func normalizeFormBody(props map[string]any) util.Mf2Document {
 	doc := util.Mf2Document{
 		Type:       []string{"h-entry"},
-		Properties: content.MicropubProperties{},
+		Properties: util.MicroformatProperties{},
 	}
 
 	for key, val := range props {

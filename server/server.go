@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,7 +18,8 @@ import (
 	"github.com/indieinfra/scribble/server/middleware"
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/storage/content"
-	contentfactory "github.com/indieinfra/scribble/storage/content/factory"
+	"github.com/indieinfra/scribble/storage/content/factory"
+	"github.com/indieinfra/scribble/storage/content/git"
 	"github.com/indieinfra/scribble/storage/media"
 	mediafactory "github.com/indieinfra/scribble/storage/media/factory"
 )
@@ -47,7 +49,7 @@ func StartServer(cfg *config.Config) error {
 	errChan := make(chan error, 1)
 	go func() {
 		log.Printf("serving http requests on %q", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errChan <- err
 		}
 	}()
@@ -81,7 +83,7 @@ func initialize(st *state.ScribbleState) (*state.ScribbleState, error) {
 
 	mediaStore, err := initializeMediaStore(&st.Cfg.Media)
 	if err != nil {
-		if gitStore, ok := st.ContentStore.(*content.GitContentStore); ok {
+		if gitStore, ok := st.ContentStore.(*git.StoreImpl); ok {
 			_ = gitStore.Cleanup()
 		}
 		return nil, err
@@ -91,17 +93,17 @@ func initialize(st *state.ScribbleState) (*state.ScribbleState, error) {
 	return st, nil
 }
 
-func initializeContentStore(cfg *config.Content) (content.ContentStore, error) {
-	return contentfactory.Create(cfg)
+func initializeContentStore(cfg *config.Content) (content.Store, error) {
+	return factory.Create(cfg)
 }
 
-func initializeMediaStore(cfg *config.Media) (media.MediaStore, error) {
+func initializeMediaStore(cfg *config.Media) (media.Store, error) {
 	return mediafactory.Create(cfg)
 }
 
 func cleanup(state *state.ScribbleState) {
 	// Cleanup git content store if applicable
-	if gitStore, ok := state.ContentStore.(*content.GitContentStore); ok {
+	if gitStore, ok := state.ContentStore.(*git.StoreImpl); ok {
 		if err := gitStore.Cleanup(); err != nil {
 			log.Printf("error during cleanup: %v", err)
 		}

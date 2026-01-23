@@ -1,4 +1,4 @@
-package content
+package sql
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
+	"github.com/indieinfra/scribble/storage/content"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/indieinfra/scribble/config"
@@ -132,7 +133,7 @@ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 }
 
 func (cs *SQLContentStore) Create(ctx context.Context, doc util.Mf2Document) (string, bool, error) {
-	slug, err := extractSlug(doc)
+	slug, err := content.ExtractSlug(doc)
 	if err != nil {
 		return "", false, err
 	}
@@ -163,12 +164,12 @@ func (cs *SQLContentStore) Update(ctx context.Context, url string, replacements 
 		return url, err
 	}
 
-	applyMutations(doc, replacements, additions, deletions)
+	content.ApplyMutations(doc, replacements, additions, deletions)
 
 	// Check if slug needs to be recomputed
 	var newSlug string
-	if shouldRecomputeSlug(replacements, additions) {
-		proposedSlug, err := computeNewSlug(doc, replacements)
+	if content.ShouldRecomputeSlug(replacements, additions) {
+		proposedSlug, err := content.ComputeNewSlug(doc, replacements)
 		if err != nil {
 			return url, err
 		}
@@ -231,12 +232,12 @@ func (cs *SQLContentStore) Update(ctx context.Context, url string, replacements 
 		}
 
 		// Insert new entry with new slug
-		if _, err := tx.ExecContext(ctx, cs.insertQuery(), newSlug, newURL, string(payload), deletedFlag(doc)); err != nil {
+		if _, err := tx.ExecContext(ctx, cs.insertQuery(), newSlug, newURL, string(payload), content.HasDeletedFlag(doc)); err != nil {
 			return url, err
 		}
 	} else {
 		// No slug change, just update in place
-		if _, err := tx.ExecContext(ctx, cs.updateQuery(), string(payload), deletedFlag(doc), oldSlug); err != nil {
+		if _, err := tx.ExecContext(ctx, cs.updateQuery(), string(payload), content.HasDeletedFlag(doc), oldSlug); err != nil {
 			return url, err
 		}
 	}
@@ -274,7 +275,7 @@ func (cs *SQLContentStore) getDocBySlug(ctx context.Context, slug string) (*util
 	var raw string
 	if err := row.Scan(&raw); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, content.ErrNotFound
 		}
 		return nil, err
 	}
@@ -298,7 +299,7 @@ func (cs *SQLContentStore) setDeletedStatus(ctx context.Context, url string, del
 		return url, err
 	}
 
-	applyMutations(doc, map[string][]any{"deleted": []any{deleted}}, nil, nil)
+	content.ApplyMutations(doc, map[string][]any{"deleted": []any{deleted}}, nil, nil)
 
 	payload, err := json.Marshal(doc)
 	if err != nil {

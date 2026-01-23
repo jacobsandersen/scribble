@@ -1,4 +1,4 @@
-package content
+package git
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,10 +22,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/server/util"
+	"github.com/indieinfra/scribble/storage/content"
 	storageutil "github.com/indieinfra/scribble/storage/util"
 )
 
-type GitContentStore struct {
+var NoErrFound = errors.New("found")
+
+type StoreImpl struct {
 	cfg       *config.GitContentStrategy
 	auth      *transport.AuthMethod
 	repo      *git.Repository
@@ -32,8 +36,6 @@ type GitContentStore struct {
 	mu        sync.Mutex
 	publicURL string
 }
-
-var NoErrFound error = errors.New("found")
 
 func freshClone(cfg *config.GitContentStrategy, auth transport.AuthMethod) (string, *git.Repository, error) {
 	tmpDir, err := os.MkdirTemp("", "scribble-*")
@@ -53,7 +55,7 @@ func freshClone(cfg *config.GitContentStrategy, auth transport.AuthMethod) (stri
 	return tmpDir, repo, nil
 }
 
-func NewGitContentStore(cfg *config.GitContentStrategy) (*GitContentStore, error) {
+func NewGitContentStore(cfg *config.GitContentStrategy) (*StoreImpl, error) {
 	auth, err := buildGitAuth(cfg)
 	if err != nil {
 		return nil, err
@@ -64,7 +66,7 @@ func NewGitContentStore(cfg *config.GitContentStrategy) (*GitContentStore, error
 		return nil, err
 	}
 
-	return &GitContentStore{
+	return &StoreImpl{
 		cfg:       cfg,
 		auth:      &auth,
 		repo:      repo,
@@ -93,9 +95,11 @@ func buildGitAuth(cfg *config.GitContentStrategy) (transport.AuthMethod, error) 
 	}
 }
 
-func (cs *GitContentStore) reinit() error {
+func (cs *StoreImpl) reinit() error {
 	// Remove old tmpDir
-	os.RemoveAll(cs.tmpDir)
+	if err := os.RemoveAll(cs.tmpDir); err != nil {
+		log.Printf("failed to remove tmp dir: %v", err)
+	}
 
 	tmpDir, repo, err := freshClone(cs.cfg, *cs.auth)
 	if err != nil {
@@ -110,7 +114,7 @@ func (cs *GitContentStore) reinit() error {
 
 // Cleanup removes the cloned repository directory to free up disk space.
 // Should be called when the application is shutting down.
-func (cs *GitContentStore) Cleanup() error {
+func (cs *StoreImpl) Cleanup() error {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
@@ -126,27 +130,36 @@ func (cs *GitContentStore) Cleanup() error {
 	return nil
 }
 
-func (cs *GitContentStore) fetchAndFastForward(ctx context.Context) error {
+func (cs *StoreImpl) fetchAndFastForward(ctx context.Context) error {
 	var lastErr error
 
 	for range 3 {
 		if err := cs.repo.FetchContext(ctx, &git.FetchOptions{Auth: *cs.auth}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 			lastErr = err
-			cs.reinit()
+			if err := cs.reinit(); err != nil {
+				lastErr = fmt.Errorf("%w: could not renit: %w", lastErr, err)
+				break
+			}
 			continue
 		}
 
 		remoteRef, err := cs.repo.Reference(plumbing.NewRemoteReferenceName("origin", "main"), true)
 		if err != nil {
 			lastErr = err
-			cs.reinit()
+			if err := cs.reinit(); err != nil {
+				lastErr = fmt.Errorf("%w: could not renit: %w", lastErr, err)
+				break
+			}
 			continue
 		}
 
 		localRef, err := cs.repo.Reference(plumbing.NewBranchReferenceName("main"), true)
 		if err != nil {
 			lastErr = err
-			cs.reinit()
+			if err := cs.reinit(); err != nil {
+				lastErr = fmt.Errorf("%w: could not renit: %w", lastErr, err)
+				break
+			}
 			continue
 		}
 
@@ -157,14 +170,20 @@ func (cs *GitContentStore) fetchAndFastForward(ctx context.Context) error {
 
 		if err := cs.repo.Storer.SetReference(plumbing.NewHashReference(plumbing.NewBranchReferenceName("main"), remoteRef.Hash())); err != nil {
 			lastErr = err
-			cs.reinit()
+			if err := cs.reinit(); err != nil {
+				lastErr = fmt.Errorf("%w: could not renit: %w", lastErr, err)
+				break
+			}
 			continue
 		}
 
 		wt, err := cs.repo.Worktree()
 		if err != nil {
 			lastErr = err
-			cs.reinit()
+			if err := cs.reinit(); err != nil {
+				lastErr = fmt.Errorf("%w: could not renit: %w", lastErr, err)
+				break
+			}
 			continue
 		}
 
@@ -173,17 +192,20 @@ func (cs *GitContentStore) fetchAndFastForward(ctx context.Context) error {
 			Commit: remoteRef.Hash(),
 		}); err != nil {
 			lastErr = err
-			cs.reinit()
+			if err := cs.reinit(); err != nil {
+				lastErr = fmt.Errorf("%w: could not renit: %w", lastErr, err)
+				break
+			}
 			continue
 		}
 
 		return nil
 	}
 
-	return fmt.Errorf("could not fetch + fastforward after 3 retries: %w", lastErr)
+	return fmt.Errorf("could not fetch + fast-forward: %w", lastErr)
 }
 
-func (cs *GitContentStore) Create(ctx context.Context, doc util.Mf2Document) (string, bool, error) {
+func (cs *StoreImpl) Create(ctx context.Context, doc util.Mf2Document) (string, bool, error) {
 	// Get slug from "slug" property (set by post handler)
 	slugProp, ok := doc.Properties["slug"]
 	if !ok || len(slugProp) == 0 {
@@ -246,7 +268,7 @@ func (cs *GitContentStore) Create(ctx context.Context, doc util.Mf2Document) (st
 	return cs.publicURL + slug, false, nil
 }
 
-func (cs *GitContentStore) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
+func (cs *StoreImpl) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
 	oldSlug, err := util.SlugFromURL(url)
 	if err != nil {
 		return url, err
@@ -264,15 +286,15 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 		return url, err
 	}
 	if doc == nil {
-		return url, ErrNotFound
+		return url, content.ErrNotFound
 	}
 
-	applyMutations(doc, replacements, additions, deletions)
+	content.ApplyMutations(doc, replacements, additions, deletions)
 
 	// Check if slug needs to be recomputed
 	var newSlug string
-	if shouldRecomputeSlug(replacements, additions) {
-		proposedSlug, err := computeNewSlug(doc, replacements)
+	if content.ShouldRecomputeSlug(replacements, additions) {
+		proposedSlug, err := content.ComputeNewSlug(doc, replacements)
 		if err != nil {
 			return url, err
 		}
@@ -433,17 +455,17 @@ func (cs *GitContentStore) Update(ctx context.Context, url string, replacements 
 	return cs.publicURL + newSlug, nil
 }
 
-func (cs *GitContentStore) Delete(ctx context.Context, url string) error {
+func (cs *StoreImpl) Delete(ctx context.Context, url string) error {
 	_, err := cs.setDeletedStatus(ctx, url, true)
 	return err
 }
 
-func (cs *GitContentStore) Undelete(ctx context.Context, url string) (string, bool, error) {
+func (cs *StoreImpl) Undelete(ctx context.Context, url string) (string, bool, error) {
 	newURL, err := cs.setDeletedStatus(ctx, url, false)
 	return newURL, false, err
 }
 
-func (cs *GitContentStore) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
+func (cs *StoreImpl) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
 	slug, err := util.SlugFromURL(url)
 	if err != nil {
 		return nil, err
@@ -461,13 +483,13 @@ func (cs *GitContentStore) Get(ctx context.Context, url string) (*util.Mf2Docume
 		return nil, err
 	}
 	if doc == nil {
-		return nil, ErrNotFound
+		return nil, content.ErrNotFound
 	}
 
 	return doc, nil
 }
 
-func (cs *GitContentStore) readDocumentBySlug(slug string) (*util.Mf2Document, error) {
+func (cs *StoreImpl) readDocumentBySlug(slug string) (*util.Mf2Document, error) {
 	head, err := cs.repo.Head()
 	if err != nil {
 		return nil, err
@@ -510,7 +532,7 @@ func (cs *GitContentStore) readDocumentBySlug(slug string) (*util.Mf2Document, e
 	return &doc, nil
 }
 
-func (cs *GitContentStore) setDeletedStatus(ctx context.Context, url string, deleted bool) (string, error) {
+func (cs *StoreImpl) setDeletedStatus(ctx context.Context, url string, deleted bool) (string, error) {
 	slug, err := util.SlugFromURL(url)
 	if err != nil {
 		return url, err
@@ -528,10 +550,10 @@ func (cs *GitContentStore) setDeletedStatus(ctx context.Context, url string, del
 		return url, err
 	}
 	if doc == nil {
-		return url, ErrNotFound
+		return url, content.ErrNotFound
 	}
 
-	applyMutations(doc, map[string][]any{"deleted": []any{deleted}}, nil, nil)
+	content.ApplyMutations(doc, map[string][]any{"deleted": []any{deleted}}, nil, nil)
 
 	jsonBytes, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
@@ -578,7 +600,7 @@ func (cs *GitContentStore) setDeletedStatus(ctx context.Context, url string, del
 	return cs.publicURL + slug, nil
 }
 
-func (cs *GitContentStore) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
+func (cs *StoreImpl) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
@@ -591,7 +613,7 @@ func (cs *GitContentStore) ExistsBySlug(ctx context.Context, slug string) (bool,
 
 // existsBySlugUnlocked checks if a slug exists WITHOUT acquiring the mutex.
 // MUST be called with cs.mu already locked.
-func (cs *GitContentStore) existsBySlugUnlocked(slug string) (bool, error) {
+func (cs *StoreImpl) existsBySlugUnlocked(slug string) (bool, error) {
 	head, err := cs.repo.Head()
 	if err != nil {
 		return false, err
@@ -670,7 +692,7 @@ func (cs *GitContentStore) existsBySlugUnlocked(slug string) (bool, error) {
 // rollbackLastCommit performs a hard reset to undo the last commit.
 // This is used when a push fails to restore the repository to its pre-commit state.
 // Returns an error if the reset fails.
-func (cs *GitContentStore) rollbackLastCommit() error {
+func (cs *StoreImpl) rollbackLastCommit() error {
 	wt, err := cs.repo.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree for rollback: %w", err)
@@ -714,7 +736,7 @@ func (cs *GitContentStore) rollbackLastCommit() error {
 // restoring the working directory to match the current commit.
 // If reset fails, attempts to reinit the repository from remote as a last resort.
 // This is used to clean up after failed commit or staging operations.
-func (cs *GitContentStore) resetToHead(wt *git.Worktree) error {
+func (cs *StoreImpl) resetToHead(wt *git.Worktree) error {
 	ref, err := cs.repo.Head()
 	if err != nil {
 		// Can't get HEAD - reinit to get back to clean remote state

@@ -10,15 +10,15 @@ import (
 	"github.com/indieinfra/scribble/server/util"
 )
 
-// deleteValues removes elements present in toRemove from values using deep equality.
-func deleteValues(values []any, toRemove []any) []any {
+// DeleteValues removes elements present in toRemove from values using deep equality.
+func DeleteValues(values []any, toRemove []any) []any {
 	if len(values) == 0 || len(toRemove) == 0 {
 		return values
 	}
 
 	var remaining []any
 	for _, v := range values {
-		if !containsValue(toRemove, v) {
+		if !ContainsValue(toRemove, v) {
 			remaining = append(remaining, v)
 		}
 	}
@@ -26,7 +26,7 @@ func deleteValues(values []any, toRemove []any) []any {
 	return remaining
 }
 
-func containsValue(list []any, value any) bool {
+func ContainsValue(list []any, value any) bool {
 	for _, candidate := range list {
 		if reflect.DeepEqual(candidate, value) {
 			return true
@@ -36,7 +36,7 @@ func containsValue(list []any, value any) bool {
 	return false
 }
 
-func extractSlug(doc util.Mf2Document) (string, error) {
+func ExtractSlug(doc util.Mf2Document) (string, error) {
 	slugProp, ok := doc.Properties["slug"]
 	if !ok || len(slugProp) == 0 {
 		return "", fmt.Errorf("document must have a slug property")
@@ -50,7 +50,7 @@ func extractSlug(doc util.Mf2Document) (string, error) {
 	return slug, nil
 }
 
-func applyMutations(doc *util.Mf2Document, replacements map[string][]any, additions map[string][]any, deletions any) {
+func ApplyMutations(doc *util.Mf2Document, replacements map[string][]any, additions map[string][]any, deletions any) {
 	if doc.Properties == nil {
 		doc.Properties = make(map[string][]any)
 	}
@@ -66,7 +66,7 @@ func applyMutations(doc *util.Mf2Document, replacements map[string][]any, additi
 	switch deletes := deletions.(type) {
 	case map[string][]any:
 		for key, valuesToRemove := range deletes {
-			remaining := deleteValues(doc.Properties[key], valuesToRemove)
+			remaining := DeleteValues(doc.Properties[key], valuesToRemove)
 			if len(remaining) == 0 {
 				delete(doc.Properties, key)
 			} else {
@@ -80,7 +80,7 @@ func applyMutations(doc *util.Mf2Document, replacements map[string][]any, additi
 	}
 }
 
-func deletedFlag(doc *util.Mf2Document) bool {
+func HasDeletedFlag(doc *util.Mf2Document) bool {
 	if doc == nil || doc.Properties == nil {
 		return false
 	}
@@ -101,10 +101,10 @@ func deletedFlag(doc *util.Mf2Document) bool {
 	return false
 }
 
-// shouldRecomputeSlug checks if the mutations affect properties that should trigger slug recomputation.
+// ShouldRecomputeSlug checks if the mutations affect properties that should trigger slug recomputation.
 // Returns true if "slug" is directly replaced with a non-empty value,
 // or if "name" or "content" are replaced/added with non-empty values.
-func shouldRecomputeSlug(replacements map[string][]any, additions map[string][]any) bool {
+func ShouldRecomputeSlug(replacements map[string][]any, additions map[string][]any) bool {
 	// Direct slug replacement - but only if non-empty
 	if slugVals, hasSlug := replacements["slug"]; hasSlug && len(slugVals) > 0 {
 		return true
@@ -129,10 +129,10 @@ func shouldRecomputeSlug(replacements map[string][]any, additions map[string][]a
 	return false
 }
 
-// computeNewSlug determines the new slug for a document after mutations.
+// ComputeNewSlug determines the new slug for a document after mutations.
 // If the slug was explicitly set in replacements, use that.
 // Otherwise, generate a new slug from name/content using util.GenerateSlug.
-func computeNewSlug(doc *util.Mf2Document, replacements map[string][]any) (string, error) {
+func ComputeNewSlug(doc *util.Mf2Document, replacements map[string][]any) (string, error) {
 	// If slug was directly replaced, validate it
 	if slugVals, ok := replacements["slug"]; ok {
 		if len(slugVals) == 0 {
@@ -153,9 +153,9 @@ func computeNewSlug(doc *util.Mf2Document, replacements map[string][]any) (strin
 	return generated, nil
 }
 
-// ensureUniqueSlug checks if the proposed slug already exists (excluding the old slug).
+// EnsureUniqueSlug checks if the proposed slug already exists (excluding the old slug).
 // If it does, appends a UUID suffix to make it unique. Returns the final unique slug.
-func ensureUniqueSlug(ctx context.Context, store ContentStore, proposedSlug, oldSlug string) (string, error) {
+func EnsureUniqueSlug(ctx context.Context, store Store, proposedSlug, oldSlug string) (string, error) {
 	// If the slug didn't actually change, no collision possible
 	if proposedSlug == oldSlug {
 		return proposedSlug, nil

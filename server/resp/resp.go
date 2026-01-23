@@ -51,7 +51,7 @@ func WriteInvalidRequest(w http.ResponseWriter, description string) {
 	writeError(w, http.StatusBadRequest, "invalid_request", description)
 }
 
-// Used specifically for the case when access tokens are specified in
+// WriteBadRequest is used specifically for the case when access tokens are specified in
 // both the Authorization header and the body. RFC6750 calls out that
 // we should return "bad request" in this case (as opposed to "invalid_request")
 // for other Micropub errors.

@@ -1,39 +1,39 @@
-package content
+package d1
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 
-	cloudflare "github.com/cloudflare/cloudflare-go/v6"
+	"github.com/cloudflare/cloudflare-go/v6"
 	cfd1 "github.com/cloudflare/cloudflare-go/v6/d1"
 	"github.com/cloudflare/cloudflare-go/v6/option"
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/server/util"
+	"github.com/indieinfra/scribble/storage/content"
 	storageutil "github.com/indieinfra/scribble/storage/util"
 )
 
-// D1ContentStore implements ContentStore using Cloudflare D1 via the HTTP API.
+// StoreImpl implements Store using Cloudflare D1 via the HTTP API.
 // It mirrors the schema of SQLContentStore to keep parity across backends.
-type D1ContentStore struct {
+type StoreImpl struct {
 	cfg       *config.D1ContentStrategy
 	client    *cloudflare.Client
 	table     string
 	publicURL string
 }
 
-// NewD1ContentStore builds a store and ensures the schema exists.
-func NewD1ContentStore(cfg *config.D1ContentStrategy) (*D1ContentStore, error) {
+// NewD1ContentStore builds a StoreImpl and ensures the schema exists.
+func NewD1ContentStore(cfg *config.D1ContentStrategy) (*StoreImpl, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("d1 content config is nil")
 	}
 
-	table := deriveTableName(cfg.TablePrefix)
-	client := buildD1Client(cfg, nil)
+	table := storageutil.DeriveTableName(cfg.TablePrefix)
+	client := buildD1Client(cfg)
 
-	store := &D1ContentStore{
+	store := &StoreImpl{
 		cfg:       cfg,
 		client:    client,
 		table:     table,
@@ -47,53 +47,10 @@ func NewD1ContentStore(cfg *config.D1ContentStrategy) (*D1ContentStore, error) {
 	return store, nil
 }
 
-// newD1ContentStoreWithClient creates a D1 store with a custom HTTP client.
-// This is used for testing to inject a mock HTTP client.
-func newD1ContentStoreWithClient(cfg *config.D1ContentStrategy, client *http.Client) (*D1ContentStore, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("d1 content config is nil")
-	}
-
-	table := deriveTableName(cfg.TablePrefix)
-	cfClient := buildD1Client(cfg, client)
-
-	store := &D1ContentStore{
-		cfg:       cfg,
-		client:    cfClient,
-		table:     table,
-		publicURL: storageutil.NormalizeBaseURL(cfg.PublicUrl),
-	}
-
-	if err := store.initSchema(context.Background()); err != nil {
-		return nil, err
-	}
-
-	return store, nil
-}
-
-// deriveTableName constructs the content table name from the configured prefix.
-// If no prefix is set, defaults to "scribble"; empty string produces "content".
-func deriveTableName(prefix *string) string {
-	p := "scribble"
-	if prefix != nil {
-		p = *prefix
-	}
-
-	if p == "" {
-		return "content"
-	}
-
-	return p + "_content"
-}
-
 // buildD1Client creates a Cloudflare client configured with API token and optional custom endpoint.
 // The httpClient parameter is used for testing; pass nil for production use.
-func buildD1Client(cfg *config.D1ContentStrategy, httpClient *http.Client) *cloudflare.Client {
+func buildD1Client(cfg *config.D1ContentStrategy) *cloudflare.Client {
 	opts := []option.RequestOption{option.WithAPIToken(strings.TrimSpace(cfg.APIToken))}
-
-	if httpClient != nil {
-		opts = append(opts, option.WithHTTPClient(httpClient))
-	}
 
 	if base := strings.TrimSpace(cfg.Endpoint); base != "" {
 		opts = append(opts, option.WithBaseURL(strings.TrimSuffix(base, "/")))
@@ -104,7 +61,7 @@ func buildD1Client(cfg *config.D1ContentStrategy, httpClient *http.Client) *clou
 
 // initSchema ensures the content table exists in the D1 database.
 // This also serves as a health check, validating connectivity and authentication.
-func (cs *D1ContentStore) initSchema(ctx context.Context) error {
+func (cs *StoreImpl) initSchema(ctx context.Context) error {
 	_, err := cs.executeQuery(ctx, cs.schemaQuery(), nil)
 	if err != nil {
 		return fmt.Errorf("d1 initialization failed (check account_id, database_id, and api_token): %w", err)
@@ -113,7 +70,7 @@ func (cs *D1ContentStore) initSchema(ctx context.Context) error {
 }
 
 // schemaQuery returns the CREATE TABLE statement for the content table.
-func (cs *D1ContentStore) schemaQuery() string {
+func (cs *StoreImpl) schemaQuery() string {
 	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 slug TEXT PRIMARY KEY,
 url TEXT NOT NULL,
@@ -124,27 +81,27 @@ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 }
 
 // insertQuery builds the SQL for creating a new document.
-func (cs *D1ContentStore) insertQuery() string {
+func (cs *StoreImpl) insertQuery() string {
 	return fmt.Sprintf("INSERT INTO %s (slug, url, doc, deleted, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)", cs.table)
 }
 
 // updateQuery builds the SQL for updating an existing document.
-func (cs *D1ContentStore) updateQuery() string {
+func (cs *StoreImpl) updateQuery() string {
 	return fmt.Sprintf("UPDATE %s SET doc = ?, deleted = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?", cs.table)
 }
 
 // selectQuery builds the SQL for retrieving a document by slug.
-func (cs *D1ContentStore) selectQuery() string {
+func (cs *StoreImpl) selectQuery() string {
 	return fmt.Sprintf("SELECT doc FROM %s WHERE slug = ? LIMIT 1", cs.table)
 }
 
 // existsQuery builds the SQL for checking if a slug exists.
-func (cs *D1ContentStore) existsQuery() string {
+func (cs *StoreImpl) existsQuery() string {
 	return fmt.Sprintf("SELECT 1 FROM %s WHERE slug = ? LIMIT 1", cs.table)
 }
 
-func (cs *D1ContentStore) Create(ctx context.Context, doc util.Mf2Document) (string, bool, error) {
-	slug, err := extractSlug(doc)
+func (cs *StoreImpl) Create(ctx context.Context, doc util.Mf2Document) (string, bool, error) {
+	slug, err := content.ExtractSlug(doc)
 	if err != nil {
 		return "", false, err
 	}
@@ -163,7 +120,7 @@ func (cs *D1ContentStore) Create(ctx context.Context, doc util.Mf2Document) (str
 	return url, true, nil
 }
 
-func (cs *D1ContentStore) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
+func (cs *StoreImpl) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
 	oldSlug, err := util.SlugFromURL(url)
 	if err != nil {
 		return url, err
@@ -174,18 +131,18 @@ func (cs *D1ContentStore) Update(ctx context.Context, url string, replacements m
 		return url, err
 	}
 
-	applyMutations(doc, replacements, additions, deletions)
+	content.ApplyMutations(doc, replacements, additions, deletions)
 
 	// Check if slug needs to be recomputed
 	var newSlug string
-	if shouldRecomputeSlug(replacements, additions) {
-		proposedSlug, err := computeNewSlug(doc, replacements)
+	if content.ShouldRecomputeSlug(replacements, additions) {
+		proposedSlug, err := content.ComputeNewSlug(doc, replacements)
 		if err != nil {
 			return url, err
 		}
 
 		// Ensure the slug is unique; if collision, append UUID
-		newSlug, err = ensureUniqueSlug(ctx, cs, proposedSlug, oldSlug)
+		newSlug, err = content.EnsureUniqueSlug(ctx, cs, proposedSlug, oldSlug)
 		if err != nil {
 			return url, err
 		}
@@ -213,7 +170,7 @@ func (cs *D1ContentStore) Update(ctx context.Context, url string, replacements m
 		deleteQuery := fmt.Sprintf("DELETE FROM %s WHERE slug = ?", cs.table)
 
 		// Step 1: Insert new row
-		if _, err := cs.executeQuery(ctx, cs.insertQuery(), []any{newSlug, newURL, string(payload), deletedFlag(doc)}); err != nil {
+		if _, err := cs.executeQuery(ctx, cs.insertQuery(), []any{newSlug, newURL, string(payload), content.HasDeletedFlag(doc)}); err != nil {
 			return url, fmt.Errorf("failed to insert new row for slug change: %w", err)
 		}
 
@@ -240,7 +197,7 @@ func (cs *D1ContentStore) Update(ctx context.Context, url string, replacements m
 		}
 	} else {
 		// No slug change, just update in place
-		if _, err := cs.executeQuery(ctx, cs.updateQuery(), []any{string(payload), deletedFlag(doc), oldSlug}); err != nil {
+		if _, err := cs.executeQuery(ctx, cs.updateQuery(), []any{string(payload), content.HasDeletedFlag(doc), oldSlug}); err != nil {
 			return url, err
 		}
 	}
@@ -248,17 +205,17 @@ func (cs *D1ContentStore) Update(ctx context.Context, url string, replacements m
 	return newURL, nil
 }
 
-func (cs *D1ContentStore) Delete(ctx context.Context, url string) error {
+func (cs *StoreImpl) Delete(ctx context.Context, url string) error {
 	_, err := cs.setDeletedStatus(ctx, url, true)
 	return err
 }
 
-func (cs *D1ContentStore) Undelete(ctx context.Context, url string) (string, bool, error) {
+func (cs *StoreImpl) Undelete(ctx context.Context, url string) (string, bool, error) {
 	newURL, err := cs.setDeletedStatus(ctx, url, false)
 	return newURL, false, err
 }
 
-func (cs *D1ContentStore) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
+func (cs *StoreImpl) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
 	slug, err := util.SlugFromURL(url)
 	if err != nil {
 		return nil, err
@@ -268,14 +225,14 @@ func (cs *D1ContentStore) Get(ctx context.Context, url string) (*util.Mf2Documen
 }
 
 // getDocBySlug retrieves and unmarshals a document from the database by its slug.
-func (cs *D1ContentStore) getDocBySlug(ctx context.Context, slug string) (*util.Mf2Document, error) {
+func (cs *StoreImpl) getDocBySlug(ctx context.Context, slug string) (*util.Mf2Document, error) {
 	rows, err := cs.query(ctx, cs.selectQuery(), slug)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(rows) == 0 {
-		return nil, ErrNotFound
+		return nil, content.ErrNotFound
 	}
 
 	raw, ok := rows[0]["doc"].(string)
@@ -293,7 +250,7 @@ func (cs *D1ContentStore) getDocBySlug(ctx context.Context, slug string) (*util.
 
 // setDeletedStatus updates the deleted flag on a document and persists it.
 // It applies the change both to the document properties and the database column.
-func (cs *D1ContentStore) setDeletedStatus(ctx context.Context, url string, deleted bool) (string, error) {
+func (cs *StoreImpl) setDeletedStatus(ctx context.Context, url string, deleted bool) (string, error) {
 	slug, err := util.SlugFromURL(url)
 	if err != nil {
 		return url, err
@@ -304,7 +261,7 @@ func (cs *D1ContentStore) setDeletedStatus(ctx context.Context, url string, dele
 		return url, err
 	}
 
-	applyMutations(doc, map[string][]any{"deleted": []any{deleted}}, nil, nil)
+	content.ApplyMutations(doc, map[string][]any{"deleted": []any{deleted}}, nil, nil)
 
 	payload, err := json.Marshal(doc)
 	if err != nil {
@@ -318,7 +275,7 @@ func (cs *D1ContentStore) setDeletedStatus(ctx context.Context, url string, dele
 	return cs.publicURL + slug, nil
 }
 
-func (cs *D1ContentStore) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
+func (cs *StoreImpl) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
 	rows, err := cs.query(ctx, cs.existsQuery(), slug)
 	if err != nil {
 		return false, err
@@ -327,13 +284,13 @@ func (cs *D1ContentStore) ExistsBySlug(ctx context.Context, slug string) (bool, 
 	return len(rows) > 0, nil
 }
 
-func (cs *D1ContentStore) query(ctx context.Context, sql string, params ...any) ([]map[string]any, error) {
+func (cs *StoreImpl) query(ctx context.Context, sql string, params ...any) ([]map[string]any, error) {
 	return cs.executeQuery(ctx, sql, params)
 }
 
 // executeQuery sends a SQL query to the D1 database and returns the result rows.
 // Returns nil rows (no error) when the query succeeds but produces no results.
-func (cs *D1ContentStore) executeQuery(ctx context.Context, sql string, params []any) ([]map[string]any, error) {
+func (cs *StoreImpl) executeQuery(ctx context.Context, sql string, params []any) ([]map[string]any, error) {
 	body := cfd1.DatabaseQueryParamsBodyD1SingleQuery{Sql: cloudflare.F(sql)}
 	if len(params) > 0 {
 		body.Params = cloudflare.F(convertParams(params))
@@ -390,20 +347,4 @@ func convertParams(params []any) []string {
 	}
 
 	return out
-}
-
-// executeBatch sends multiple SQL queries to D1 sequentially.
-// Note: D1 doesn't support full transactions, but we can execute queries in sequence.
-// If any query fails, we return an error. The caller should handle rollback logic if needed.
-func (cs *D1ContentStore) executeBatch(ctx context.Context, queries []struct {
-	sql    string
-	params []any
-}) error {
-	// Execute each query in sequence
-	for i, q := range queries {
-		if _, err := cs.executeQuery(ctx, q.sql, q.params); err != nil {
-			return fmt.Errorf("batch query %d failed: %w", i, err)
-		}
-	}
-	return nil
 }

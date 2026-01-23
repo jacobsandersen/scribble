@@ -1,4 +1,4 @@
-package media
+package s3
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"github.com/indieinfra/scribble/config"
 )
 
-// S3MediaStore uploads media to S3 or any compatible service (R2, Backblaze, MinIO).
+// StoreImpl uploads media to S3 or any compatible service (R2, Backblaze, MinIO).
 type s3Client interface {
 	BucketExists(ctx context.Context, bucketName string) (bool, error)
 	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
@@ -28,7 +28,7 @@ var newMinioClient = func(endpoint string, opts *minio.Options) (s3Client, error
 	return minio.New(endpoint, opts)
 }
 
-type S3MediaStore struct {
+type StoreImpl struct {
 	client         s3Client
 	bucket         string
 	prefix         string
@@ -39,7 +39,7 @@ type S3MediaStore struct {
 	region         string
 }
 
-func NewS3MediaStore(cfg *config.Media) (*S3MediaStore, error) {
+func NewS3MediaStore(cfg *config.Media) (*StoreImpl, error) {
 	if cfg == nil || cfg.S3 == nil {
 		return nil, fmt.Errorf("s3 media config is nil")
 	}
@@ -89,7 +89,7 @@ func NewS3MediaStore(cfg *config.Media) (*S3MediaStore, error) {
 		return nil, fmt.Errorf("s3 bucket %q does not exist or is not accessible", s3cfg.Bucket)
 	}
 
-	return &S3MediaStore{
+	return &StoreImpl{
 		client:         client,
 		bucket:         s3cfg.Bucket,
 		prefix:         strings.TrimPrefix(s3cfg.Prefix, "/"),
@@ -101,7 +101,7 @@ func NewS3MediaStore(cfg *config.Media) (*S3MediaStore, error) {
 	}, nil
 }
 
-func (s *S3MediaStore) Upload(ctx context.Context, file *multipart.File, header *multipart.FileHeader) (string, error) {
+func (s *StoreImpl) Upload(ctx context.Context, file *multipart.File, header *multipart.FileHeader) (string, error) {
 	if file == nil || header == nil {
 		return "", fmt.Errorf("file and header are required")
 	}
@@ -117,7 +117,7 @@ func (s *S3MediaStore) Upload(ctx context.Context, file *multipart.File, header 
 	return s.objectURL(key), nil
 }
 
-func (s *S3MediaStore) Delete(ctx context.Context, urlStr string) error {
+func (s *StoreImpl) Delete(ctx context.Context, urlStr string) error {
 	key, err := s.keyFromURL(urlStr)
 	if err != nil {
 		return err
@@ -130,7 +130,7 @@ func (s *S3MediaStore) Delete(ctx context.Context, urlStr string) error {
 	return nil
 }
 
-func (s *S3MediaStore) objectKey(filename string) string {
+func (s *StoreImpl) objectKey(filename string) string {
 	name := path.Base(filename)
 	if name == "." || name == "" {
 		name = "upload"
@@ -146,7 +146,7 @@ func (s *S3MediaStore) objectKey(filename string) string {
 	return key
 }
 
-func (s *S3MediaStore) objectURL(key string) string {
+func (s *StoreImpl) objectURL(key string) string {
 	if s.publicBase != "" {
 		return s.publicBase + "/" + key
 	}
@@ -163,7 +163,7 @@ func (s *S3MediaStore) objectURL(key string) string {
 	return fmt.Sprintf("%s://%s.%s/%s", scheme, s.bucket, s.endpointHost, key)
 }
 
-func (s *S3MediaStore) keyFromURL(urlStr string) (string, error) {
+func (s *StoreImpl) keyFromURL(urlStr string) (string, error) {
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return "", fmt.Errorf("invalid media url: %w", err)

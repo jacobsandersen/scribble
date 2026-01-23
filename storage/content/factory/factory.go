@@ -6,10 +6,14 @@ import (
 
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/storage/content"
+	"github.com/indieinfra/scribble/storage/content/d1"
+	"github.com/indieinfra/scribble/storage/content/filesystem"
+	"github.com/indieinfra/scribble/storage/content/git"
+	"github.com/indieinfra/scribble/storage/content/sql"
 )
 
 // Factory builds a content store for the provided content config.
-type Factory func(*config.Content) (content.ContentStore, error)
+type Factory func(*config.Content) (content.Store, error)
 
 var (
 	mu       sync.RWMutex
@@ -32,7 +36,7 @@ func Get(strategy string) (Factory, bool) {
 }
 
 // Create builds a content store using the registered factory for the configured strategy.
-func Create(cfg *config.Content) (content.ContentStore, error) {
+func Create(cfg *config.Content) (content.Store, error) {
 	f, ok := Get(cfg.Strategy)
 	if !ok {
 		return nil, fmt.Errorf("unknown content strategy %q", cfg.Strategy)
@@ -41,19 +45,19 @@ func Create(cfg *config.Content) (content.ContentStore, error) {
 }
 
 func init() {
-	Register("git", func(cfg *config.Content) (content.ContentStore, error) {
-		return content.NewGitContentStore(cfg.Git)
+	Register("git", func(cfg *config.Content) (content.Store, error) {
+		return git.NewGitContentStore(cfg.Git)
 	})
 
-	Register("sql", func(cfg *config.Content) (content.ContentStore, error) {
-		return content.NewSQLContentStore(cfg.SQL)
+	Register("sql", func(cfg *config.Content) (content.Store, error) {
+		return sql.NewSQLContentStore(cfg.SQL)
 	})
 
-	Register("d1", func(cfg *config.Content) (content.ContentStore, error) {
-		return content.NewD1ContentStore(cfg.D1)
+	Register("d1", func(cfg *config.Content) (content.Store, error) {
+		return d1.NewD1ContentStore(cfg.D1)
 	})
 
-	Register("filesystem", func(cfg *config.Content) (content.ContentStore, error) {
-		return content.NewFilesystemContentStore(cfg.Filesystem)
+	Register("filesystem", func(cfg *config.Content) (content.Store, error) {
+		return filesystem.NewFilesystemContentStore(cfg.Filesystem)
 	})
 }

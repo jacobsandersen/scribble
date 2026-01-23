@@ -1,4 +1,4 @@
-package media
+package filesystem
 
 import (
 	"context"
@@ -17,8 +17,8 @@ import (
 	storageutil "github.com/indieinfra/scribble/storage/util"
 )
 
-// FilesystemMediaStore stores uploaded media files in a local directory.
-type FilesystemMediaStore struct {
+// StoreImpl stores uploaded media files in a local directory.
+type StoreImpl struct {
 	basePath  string
 	publicURL string
 	pattern   *storageutil.PathPattern
@@ -26,7 +26,7 @@ type FilesystemMediaStore struct {
 }
 
 // NewFilesystemMediaStore creates a new filesystem-based media store.
-func NewFilesystemMediaStore(cfg *config.FilesystemMediaStrategy) (*FilesystemMediaStore, error) {
+func NewFilesystemMediaStore(cfg *config.FilesystemMediaStrategy) (*StoreImpl, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("filesystem media config is nil")
 	}
@@ -42,7 +42,7 @@ func NewFilesystemMediaStore(cfg *config.FilesystemMediaStrategy) (*FilesystemMe
 		pattern = storageutil.NewPathPattern(cfg.PathPattern)
 	}
 
-	return &FilesystemMediaStore{
+	return &StoreImpl{
 		basePath:  cfg.Path,
 		publicURL: storageutil.NormalizeBaseURL(cfg.PublicUrl),
 		pattern:   pattern,
@@ -50,7 +50,7 @@ func NewFilesystemMediaStore(cfg *config.FilesystemMediaStrategy) (*FilesystemMe
 }
 
 // Upload saves the provided file to the filesystem and returns its public URL.
-func (fs *FilesystemMediaStore) Upload(ctx context.Context, file *multipart.File, header *multipart.FileHeader) (string, error) {
+func (fs *StoreImpl) Upload(ctx context.Context, file *multipart.File, header *multipart.FileHeader) (string, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -126,7 +126,7 @@ func (fs *FilesystemMediaStore) Upload(ctx context.Context, file *multipart.File
 }
 
 // Delete removes a media file from the filesystem.
-func (fs *FilesystemMediaStore) Delete(ctx context.Context, url string) error {
+func (fs *StoreImpl) Delete(ctx context.Context, url string) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -157,7 +157,7 @@ func (fs *FilesystemMediaStore) Delete(ctx context.Context, url string) error {
 
 	// Optionally clean up empty parent directories
 	// (commented out to avoid accidentally removing user-created directories)
-	// _ = cleanupEmptyDirs(fs.basePath, filepath.Dir(absPath))
+	// _ = cleanupEmptyDirs(filesystem.basePath, filepath.Dir(absPath))
 
 	return nil
 }

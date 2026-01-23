@@ -6,10 +6,12 @@ import (
 
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/storage/media"
+	"github.com/indieinfra/scribble/storage/media/filesystem"
+	"github.com/indieinfra/scribble/storage/media/s3"
 )
 
 // Factory builds a media store for the provided media config.
-type Factory func(*config.Media) (media.MediaStore, error)
+type Factory func(*config.Media) (media.Store, error)
 
 var (
 	mu       sync.RWMutex
@@ -32,7 +34,7 @@ func Get(strategy string) (Factory, bool) {
 }
 
 // Create builds a media store using the registered factory for the configured strategy.
-func Create(cfg *config.Media) (media.MediaStore, error) {
+func Create(cfg *config.Media) (media.Store, error) {
 	if f, ok := Get(cfg.Strategy); ok {
 		return f(cfg)
 	}
@@ -41,13 +43,10 @@ func Create(cfg *config.Media) (media.MediaStore, error) {
 }
 
 func init() {
-	Register("noop", func(cfg *config.Media) (media.MediaStore, error) {
-		return &media.NoopMediaStore{}, nil
+	Register("s3", func(cfg *config.Media) (media.Store, error) {
+		return s3.NewS3MediaStore(cfg)
 	})
-	Register("s3", func(cfg *config.Media) (media.MediaStore, error) {
-		return media.NewS3MediaStore(cfg)
-	})
-	Register("filesystem", func(cfg *config.Media) (media.MediaStore, error) {
-		return media.NewFilesystemMediaStore(cfg.Filesystem)
+	Register("filesystem", func(cfg *config.Media) (media.Store, error) {
+		return filesystem.NewFilesystemMediaStore(cfg.Filesystem)
 	})
 }

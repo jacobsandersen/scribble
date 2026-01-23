@@ -5,9 +5,11 @@ import (
 	"fmt"
 )
 
+type MicroformatProperties map[string][]any
+
 type Mf2Document struct {
-	Type       []string         `json:"type"`
-	Properties map[string][]any `json:"properties"`
+	Type       []string              `json:"type"`
+	Properties MicroformatProperties `json:"properties"`
 }
 
 func ValidateMf2(doc Mf2Document) error {
