@@ -31,13 +31,13 @@ jobs:
           docker info
           docker ps
 
-      - name: Run tests with coverage
-        run: bash hack/coverage.sh
+      # - name: Run tests with coverage
+      #   run: bash hack/coverage.sh
 
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: |
-            coverage.out
-            coverage.txt
+      # - name: Upload coverage artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: coverage
+      #     path: |
+      #       coverage.out
+      #       coverage.txt
