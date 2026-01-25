@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/indieinfra/scribble/server/body"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 )
@@ -25,7 +26,7 @@ type Config struct {
 	SyndicateTo   []SyndicateTo `json:"syndicate-to"`
 }
 
-func HandleConfig(st *state.ScribbleState, w http.ResponseWriter, r *http.Request) {
+func HandleConfig(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, p body.QueryParams) {
 	cfgOut := Config{
 		MediaEndpoint: fmt.Sprintf("%v/media", st.Cfg.Server.PublicUrl),
 		SyndicateTo:   []SyndicateTo{},

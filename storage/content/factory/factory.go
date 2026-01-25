@@ -7,9 +7,6 @@ import (
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/storage/content"
 	"github.com/indieinfra/scribble/storage/content/d1"
-	"github.com/indieinfra/scribble/storage/content/filesystem"
-	"github.com/indieinfra/scribble/storage/content/git"
-	"github.com/indieinfra/scribble/storage/content/sql"
 )
 
 // Factory builds a content store for the provided content config.
@@ -45,19 +42,7 @@ func Create(cfg *config.Content) (content.Store, error) {
 }
 
 func init() {
-	Register("git", func(cfg *config.Content) (content.Store, error) {
-		return git.NewGitContentStore(cfg.Git)
-	})
-
-	Register("sql", func(cfg *config.Content) (content.Store, error) {
-		return sql.NewSQLContentStore(cfg.SQL)
-	})
-
 	Register("d1", func(cfg *config.Content) (content.Store, error) {
-		return d1.NewD1ContentStore(cfg.D1)
-	})
-
-	Register("filesystem", func(cfg *config.Content) (content.Store, error) {
-		return filesystem.NewFilesystemContentStore(cfg.Filesystem)
+		return d1.NewD1ContentStore(cfg)
 	})
 }

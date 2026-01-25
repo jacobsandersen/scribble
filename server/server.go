@@ -19,7 +19,6 @@ import (
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/storage/content"
 	"github.com/indieinfra/scribble/storage/content/factory"
-	"github.com/indieinfra/scribble/storage/content/git"
 	"github.com/indieinfra/scribble/storage/media"
 	mediafactory "github.com/indieinfra/scribble/storage/media/factory"
 )
@@ -28,9 +27,6 @@ func StartServer(cfg *config.Config) error {
 	log.Println("initializing...")
 	st, err := initialize(&state.ScribbleState{Cfg: cfg})
 	if err != nil {
-		if st != nil && st.ContentStore != nil {
-			cleanup(st)
-		}
 		return fmt.Errorf("initialization failed: %w", err)
 	}
 
@@ -66,10 +62,8 @@ func StartServer(cfg *config.Config) error {
 		if err := srv.Shutdown(ctx); err != nil {
 			log.Printf("graceful shutdown failed: %v", err)
 		}
-		cleanup(st)
 		return nil
 	case err := <-errChan:
-		cleanup(st)
 		return err
 	}
 }
@@ -83,9 +77,6 @@ func initialize(st *state.ScribbleState) (*state.ScribbleState, error) {
 
 	mediaStore, err := initializeMediaStore(&st.Cfg.Media)
 	if err != nil {
-		if gitStore, ok := st.ContentStore.(*git.StoreImpl); ok {
-			_ = gitStore.Cleanup()
-		}
 		return nil, err
 	}
 	st.MediaStore = mediaStore
@@ -99,13 +90,4 @@ func initializeContentStore(cfg *config.Content) (content.Store, error) {
 
 func initializeMediaStore(cfg *config.Media) (media.Store, error) {
 	return mediafactory.Create(cfg)
-}
-
-func cleanup(state *state.ScribbleState) {
-	// Cleanup git content store if applicable
-	if gitStore, ok := state.ContentStore.(*git.StoreImpl); ok {
-		if err := gitStore.Cleanup(); err != nil {
-			log.Printf("error during cleanup: %v", err)
-		}
-	}
 }

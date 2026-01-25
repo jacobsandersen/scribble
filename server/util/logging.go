@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 )
 
@@ -37,17 +38,16 @@ func ContextWithLogger(ctx context.Context, rl *RequestLogger) context.Context {
 	return context.WithValue(ctx, loggerKey, rl)
 }
 
-func (rl *RequestLogger) logf(level string, format string, v ...any) {
-	// Simple prefix formatting; can be swapped to structured fields later.
-	prefix := "" + level + " method=" + rl.method + " path=" + rl.path
+func (rl *RequestLogger) logf(level string, message string) {
+	prefix := fmt.Sprintf("%s [%s %s]", level, rl.method, rl.path)
 	if rl.user != "" {
-		prefix += " user=" + rl.user
+		prefix = fmt.Sprintf("%s (%s)", prefix, rl.user)
 	}
-	rl.logger.Printf(prefix+" "+format, v...)
+	rl.logger.Printf("%s: %s", prefix, message)
 }
 
-func (rl *RequestLogger) Infof(format string, v ...any)  { rl.logf("INFO", format, v...) }
-func (rl *RequestLogger) Errorf(format string, v ...any) { rl.logf("ERROR", format, v...) }
+func (rl *RequestLogger) Infof(format string, v ...any)  { rl.logf("INFO", fmt.Sprintf(format, v...)) }
+func (rl *RequestLogger) Errorf(format string, v ...any) { rl.logf("ERROR", fmt.Sprintf(format, v...)) }
 
 // FromContext retrieves a request logger from context when available.
 func FromContext(ctx context.Context) *RequestLogger {

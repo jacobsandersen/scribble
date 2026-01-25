@@ -6,7 +6,6 @@ import (
 
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/storage/media"
-	"github.com/indieinfra/scribble/storage/media/filesystem"
 	"github.com/indieinfra/scribble/storage/media/s3"
 )
 
@@ -45,8 +44,5 @@ func Create(cfg *config.Media) (media.Store, error) {
 func init() {
 	Register("s3", func(cfg *config.Media) (media.Store, error) {
 		return s3.NewS3MediaStore(cfg)
-	})
-	Register("filesystem", func(cfg *config.Media) (media.Store, error) {
-		return filesystem.NewFilesystemMediaStore(cfg.Filesystem)
 	})
 }

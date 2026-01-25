@@ -27,8 +27,3 @@ func LogAndWriteError(w http.ResponseWriter, r *http.Request, op string, err err
 		resp.WriteInternalServerError(w, fmt.Sprintf("%s failed", op))
 	}
 }
-
-// LogAndWriteInternal keeps backward compatibility for callers expecting only 500 behavior.
-func LogAndWriteInternal(w http.ResponseWriter, r *http.Request, op string, err error) {
-	LogAndWriteError(w, r, op, err)
-}

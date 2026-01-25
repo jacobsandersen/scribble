@@ -34,46 +34,19 @@ micropub:
   token_endpoint: "https://tokens.indieauth.com/token"
 
 content:
-  strategy: git
-  git:
-    repository: "https://github.com/myusername/my-website.git"
-    path: "src/content/scribble"
-    public_url: "https://example.org/content/permalink"
-    auth:
-      method: plain
-      plain:
-        username: "replaceme"
-        password: "replaceme"
-      sshkey:
-        private_key_file: ""
-        passphrase: ""
-
-  # Use the SQL backend instead of git by switching the strategy and configuring the database connection.
-  # strategy: sql
-  # sql:
-  #   driver: postgres # or mysql
-  #   dsn: "postgres://user:pass@localhost:5432/scribble?sslmode=disable"
-  #   public_url: "https://example.org/content/permalink"
-  #   table_prefix: "scribble" # optional, defaults to "scribble"; final table becomes <prefix>_content; set to "" to use plain "content"
-
-  # Use the Cloudflare D1 backend by switching the strategy and configuring API access.
-  # strategy: d1
-  # d1:
-  #   account_id: "your-account-id"
-  #   database_id: "your-d1-database-id"
-  #   api_token: "your-api-or-user-token"
-  #   public_url: "https://example.org/content/permalink"
-  #   table_prefix: "scribble" # optional, defaults to "scribble"; final table becomes <prefix>_content; set to "" to use plain "content"
-  #   endpoint: "https://api.cloudflare.com/client/v4" # optional override for testing/self-hosted proxies
-
-  # Use the local filesystem backend for simple deployments.
-  # strategy: filesystem
-  # filesystem:
-  #   path: "/var/www/scribble/content" # absolute path to store JSON documents
-  #   public_url: "https://example.org/content/" # base URL for permalinks
-  #   path_pattern: "{slug}.json" # optional: file path template; defaults to "{slug}.json"
-  #                                 # supports: {year}, {month}, {day}, {slug}, {ext}, {filename}
-  #                                 # example: "{year}/{month}/{slug}.json" for date-based organization
+  strategy: d1
+  public_url: "https://example.org/content/permalink"
+  pagination:
+    # Whether to paginate source list queries (recommended; default true)
+    enabled: true
+    # How many items per page to return for a source list query
+    per_page: 20
+  d1:
+    account_id: "your-account-id"
+    database_id: "your-d1-database-id"
+    api_token: "your-api-or-user-token"
+    table_prefix: "scribble" # optional, defaults to "scribble"; final table becomes <prefix>_content; set to "" to use plain "content"
+    endpoint: "https://api.cloudflare.com/client/v4" # optional override for testing/self-hosted proxies
 
 media:
   strategy: s3
@@ -87,12 +60,3 @@ media:
     disable_ssl: false
     prefix: ""
     public_url: "" # optional CDN/base URL override
-
-  # Use the local filesystem backend for simple deployments.
-  # strategy: filesystem
-  # filesystem:
-  #   path: "/var/www/scribble/media" # absolute path to store uploaded files
-  #   public_url: "https://example.org/media/" # base URL for media URLs
-  #   path_pattern: "{year}/{month}/{filename}" # optional: file path template; defaults to "{year}/{month}/{filename}"
-  #                                              # supports: {year}, {month}, {day}, {slug}, {ext}, {filename}
-  #                                              # example: "{year}/{month}/{day}/{filename}" for daily organization

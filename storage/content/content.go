@@ -27,6 +27,14 @@ type Store interface {
 	// error will be returned and the document pointer will be nil.
 	Get(ctx context.Context, url string) (*util.Mf2Document, error)
 
+	// List returns a collection of documents respecting the provided page.
+	// If pagination is disabled, the page parameter is ignored and all documents are returned.
+	List(ctx context.Context, page int, limit int) ([]util.Mf2Document, error)
+
+	// ListCategories returns a collection of categories previously seen by Scribble.
+	// This specifically looks for documents containing a "category" property.
+	ListCategories(ctx context.Context, page int, limit int, filter string) ([]string, error)
+
 	// ExistsBySlug accepts a slug and returns whether a post exists by that slug. If an error occurs while
 	// traversing the git tree, a non-nil error will be returned
 	ExistsBySlug(ctx context.Context, slug string) (bool, error)

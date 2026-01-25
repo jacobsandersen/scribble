@@ -1,6 +1,9 @@
 package util
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // NormalizeBaseURL ensures the base URL ends with a slash.
 func NormalizeBaseURL(raw string) string {
@@ -9,17 +12,11 @@ func NormalizeBaseURL(raw string) string {
 	return trimmed + "/"
 }
 
-// DeriveTableName constructs the content table name from the configured prefix.
-// If no prefix is set, defaults to "scribble"; empty string produces "content".
-func DeriveTableName(prefix *string) string {
-	p := "scribble"
-	if prefix != nil {
-		p = *prefix
+// DeriveTableName constructs a scribble table name from the configured prefix, if any.
+func DeriveTableName(prefix string, table string) string {
+	if prefix == "" {
+		return table
 	}
 
-	if p == "" {
-		return "content"
-	}
-
-	return p + "_content"
+	return fmt.Sprintf("%s_%s", prefix, table)
 }

@@ -2,6 +2,7 @@ package post
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -34,7 +35,10 @@ func DispatchPost(st *state.ScribbleState) http.HandlerFunc {
 		if parsed.AccessToken != "" && auth.GetToken(r.Context()) != nil {
 			for _, pf := range parsed.Files {
 				if pf.File != nil {
-					pf.File.Close()
+					err := pf.File.Close()
+					if err != nil {
+						log.Printf("Error closing file: %v", err)
+					}
 				}
 			}
 			resp.WriteBadRequest(w, "access token must appear in header or body, not both")

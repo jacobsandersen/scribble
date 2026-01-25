@@ -7,6 +7,7 @@ import (
 	"github.com/indieinfra/scribble/server/handler/common"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
+	"github.com/indieinfra/scribble/server/util"
 )
 
 func Delete(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, data map[string]any, isUndelete bool) {
@@ -19,6 +20,11 @@ func Delete(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 	url, ok := urlRaw.(string)
 	if !ok {
 		resp.WriteInvalidRequest(w, "URL to delete must be a string")
+		return
+	}
+
+	if !util.UrlIsSupported(st.Cfg.Content.PublicUrl, url) {
+		resp.WriteInvalidRequest(w, "Invalid URL (not a supported destination)")
 		return
 	}
 
