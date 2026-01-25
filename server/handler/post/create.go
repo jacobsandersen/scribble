@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/server/auth"
@@ -60,6 +61,14 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 	}
 
 	document.Properties["slug"] = []any{finalSlug}
+
+	timeNow := time.Now().Local().Format(time.RFC3339)
+	if !document.HasProp("created-at") {
+		document.AddProp("created-at", timeNow)
+	}
+	if !document.HasProp("updated-at") {
+		document.AddProp("updated-at", timeNow)
+	}
 
 	url, now, err := st.ContentStore.Create(r.Context(), document)
 	if err != nil {

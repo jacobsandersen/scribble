@@ -3,6 +3,7 @@ package content
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
 	"strings"
 
@@ -55,9 +56,15 @@ func ApplyMutations(doc *util.Mf2Document, replacements map[string][]any, additi
 		doc.Properties = make(map[string][]any)
 	}
 
-	for key, values := range replacements {
-		doc.Properties[key] = values
+	if replacements == nil {
+		replacements = map[string][]any{}
 	}
+
+	if _, ok := replacements["updated-at"]; !ok {
+		replacements["updated-at"] = []any{util.CurrentTimeRFC3339()}
+	}
+
+	maps.Copy(doc.Properties, replacements)
 
 	for key, values := range additions {
 		doc.Properties[key] = append(doc.Properties[key], values...)

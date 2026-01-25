@@ -12,6 +12,19 @@ type Mf2Document struct {
 	Properties MicroformatProperties `json:"properties"`
 }
 
+func (d *Mf2Document) HasProp(key string) bool {
+	_, ok := d.Properties[key]
+	return ok
+}
+
+func (d *Mf2Document) AddProp(key string, value any) {
+	if d.HasProp(key) {
+		d.Properties[key] = append(d.Properties[key], value)
+	} else {
+		d.Properties[key] = []any{value}
+	}
+}
+
 func ValidateMf2(doc Mf2Document) error {
 	if len(doc.Type) == 0 {
 		return errors.New("mf2 type array must not be empty")
