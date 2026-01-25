@@ -216,7 +216,7 @@ func (cs *StoreImpl) Update(ctx context.Context, url string, replacements map[st
 		deleteQuery := fmt.Sprintf("DELETE FROM %s WHERE json_extract(doc, '$.properties.slug') = json_array(?)", cs.table)
 
 		// Step 1: Insert new row
-		if _, err := cs.executeQuery(ctx, cs.insertQuery(), []any{newSlug, newURL, string(payload), content.HasDeletedFlag(doc)}); err != nil {
+		if _, err := cs.executeQuery(ctx, cs.insertQuery(), string(payload)); err != nil {
 			return url, fmt.Errorf("failed to insert new row for slug change: %w", err)
 		}
 
@@ -224,26 +224,26 @@ func (cs *StoreImpl) Update(ctx context.Context, url string, replacements map[st
 		exists, err := cs.ExistsBySlug(ctx, newSlug)
 		if err != nil {
 			// Attempt rollback: delete the new row we just inserted
-			_, _ = cs.executeQuery(ctx, deleteQuery, []any{newSlug})
+			_, _ = cs.executeQuery(ctx, deleteQuery, newSlug)
 			return url, fmt.Errorf("failed to verify new row after insert: %w", err)
 		}
 		if !exists {
 			// Attempt rollback: delete the new row (though it wasn't found)
-			_, _ = cs.executeQuery(ctx, deleteQuery, []any{newSlug})
+			_, _ = cs.executeQuery(ctx, deleteQuery, newSlug)
 			return url, fmt.Errorf("new row not found after insert, refusing to proceed")
 		}
 
 		// Step 3: Delete old row
-		if _, err := cs.executeQuery(ctx, deleteQuery, []any{oldSlug}); err != nil {
+		if _, err := cs.executeQuery(ctx, deleteQuery, oldSlug); err != nil {
 			// ROLLBACK: Delete the new row to restore original state
-			if _, rbErr := cs.executeQuery(ctx, deleteQuery, []any{newSlug}); rbErr != nil {
+			if _, rbErr := cs.executeQuery(ctx, deleteQuery, newSlug); rbErr != nil {
 				return url, fmt.Errorf("failed to delete old row and rollback failed (system inconsistent): delete_error=%w, rollback_error=%v", err, rbErr)
 			}
 			return url, fmt.Errorf("failed to delete old row (rolled back successfully): %w", err)
 		}
 	} else {
 		// No slug change, just update in place
-		if _, err := cs.executeQuery(ctx, cs.updateQuery(), []any{string(payload), content.HasDeletedFlag(doc), oldSlug}); err != nil {
+		if _, err := cs.executeQuery(ctx, cs.updateQuery(), string(payload), oldSlug); err != nil {
 			return url, err
 		}
 	}
