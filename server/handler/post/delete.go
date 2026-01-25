@@ -33,11 +33,8 @@ func Delete(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 			return
 		}
 
-		url, isNewUrl, err := st.ContentStore.Undelete(r.Context(), url)
-		if err != nil {
+		if _, err := st.ContentStore.Undelete(r.Context(), url); err != nil {
 			common.LogAndWriteError(w, r, "undelete content", err)
-		} else if isNewUrl {
-			resp.WriteCreated(w, url)
 		} else {
 			resp.WriteNoContent(w)
 		}
@@ -46,7 +43,7 @@ func Delete(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 			return
 		}
 
-		if err := st.ContentStore.Delete(r.Context(), url); err != nil {
+		if _, err := st.ContentStore.Delete(r.Context(), url); err != nil {
 			common.LogAndWriteError(w, r, "delete content", err)
 		} else {
 			resp.WriteNoContent(w)

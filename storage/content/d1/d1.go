@@ -251,14 +251,12 @@ func (cs *StoreImpl) Update(ctx context.Context, url string, replacements map[st
 	return newURL, nil
 }
 
-func (cs *StoreImpl) Delete(ctx context.Context, url string) error {
-	_, err := cs.setDeletedStatus(ctx, url, true)
-	return err
+func (cs *StoreImpl) Delete(ctx context.Context, url string) (string, error) {
+	return cs.Update(ctx, url, map[string][]any{"deleted": {true}}, nil, nil)
 }
 
-func (cs *StoreImpl) Undelete(ctx context.Context, url string) (string, bool, error) {
-	newURL, err := cs.setDeletedStatus(ctx, url, false)
-	return newURL, false, err
+func (cs *StoreImpl) Undelete(ctx context.Context, url string) (string, error) {
+	return cs.Update(ctx, url, nil, nil, []string{"deleted"})
 }
 
 func (cs *StoreImpl) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
@@ -353,12 +351,6 @@ func (cs *StoreImpl) getDocBySlug(ctx context.Context, slug string) (*util.Mf2Do
 	}
 
 	return &doc, nil
-}
-
-// setDeletedStatus updates the deleted flag on a document and persists it.
-// It applies the change both to the document properties and the database column.
-func (cs *StoreImpl) setDeletedStatus(ctx context.Context, url string, deleted bool) (string, error) {
-	return cs.Update(ctx, url, map[string][]any{"deleted": {deleted}}, nil, nil)
 }
 
 func (cs *StoreImpl) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
