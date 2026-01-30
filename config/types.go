@@ -27,10 +27,11 @@ type Micropub struct {
 }
 
 type Content struct {
-	Strategy   string             `mapstructure:"strategy" validate:"required,oneof=d1"`
-	PublicUrl  string             `mapstructure:"public_url" validate:"required,url"`
-	Pagination Pagination         `mapstructure:"pagination" validate:"required"`
-	D1         *D1ContentStrategy `mapstructure:"d1" validate:"required_if=Strategy d1"`
+	Strategy           string             `mapstructure:"strategy" validate:"required,oneof=d1"`
+	PublicBaseUrl      string             `mapstructure:"public_base_url" validate:"required,url"`
+	ContentPathPattern string             `mapstructure:"content_path_pattern" validate:"required,pathpattern"`
+	Pagination         Pagination         `mapstructure:"pagination" validate:"required"`
+	D1                 *D1ContentStrategy `mapstructure:"d1" validate:"required_if=Strategy d1"`
 }
 
 type Pagination struct {

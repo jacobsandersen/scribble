@@ -21,6 +21,7 @@ import (
 	"github.com/indieinfra/scribble/storage/content/factory"
 	"github.com/indieinfra/scribble/storage/media"
 	mediafactory "github.com/indieinfra/scribble/storage/media/factory"
+	"github.com/indieinfra/scribble/storage/util"
 )
 
 func StartServer(cfg *config.Config) error {
@@ -69,6 +70,8 @@ func StartServer(cfg *config.Config) error {
 }
 
 func initialize(st *state.ScribbleState) (*state.ScribbleState, error) {
+	st.PathPattern = util.NewPathPattern(st.Cfg.Content.ContentPathPattern)
+
 	contentStore, err := initializeContentStore(&st.Cfg.Content)
 	if err != nil {
 		return nil, err

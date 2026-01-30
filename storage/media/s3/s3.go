@@ -6,11 +6,9 @@ import (
 	"io"
 	"mime/multipart"
 	"net/url"
-	"path"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
@@ -101,12 +99,10 @@ func NewS3MediaStore(cfg *config.Media) (*StoreImpl, error) {
 	}, nil
 }
 
-func (s *StoreImpl) Upload(ctx context.Context, file *multipart.File, header *multipart.FileHeader) (string, error) {
+func (s *StoreImpl) Upload(ctx context.Context, file *multipart.File, header *multipart.FileHeader, key string) (string, error) {
 	if file == nil || header == nil {
 		return "", fmt.Errorf("file and header are required")
 	}
-
-	key := s.objectKey(header.Filename)
 
 	opts := minio.PutObjectOptions{ContentType: header.Header.Get("Content-Type")}
 
@@ -128,22 +124,6 @@ func (s *StoreImpl) Delete(ctx context.Context, urlStr string) error {
 	}
 
 	return nil
-}
-
-func (s *StoreImpl) objectKey(filename string) string {
-	name := path.Base(filename)
-	if name == "." || name == "" {
-		name = "upload"
-	}
-
-	stamp := time.Now().UTC().Format("2006/01/02")
-	key := path.Join(stamp, uuid.NewString()+"-"+name)
-
-	if s.prefix != "" {
-		key = path.Join(s.prefix, key)
-	}
-
-	return key
 }
 
 func (s *StoreImpl) objectURL(key string) string {

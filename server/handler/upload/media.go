@@ -3,6 +3,7 @@ package upload
 import (
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/server/auth"
 	"github.com/indieinfra/scribble/server/handler/common"
 	"github.com/indieinfra/scribble/server/middleware"
@@ -20,29 +21,41 @@ func HandleMediaUpload(st *state.ScribbleState) http.HandlerFunc {
 
 		maxMemory := int64(st.Cfg.Server.Limits.MaxMultipartMem)
 		maxSize := int64(st.Cfg.Server.Limits.MaxFileSize)
-		values, file, header, _, ok := util.ParseMultipartWithFirstFile(w, r, maxMemory, maxSize, []string{"file"}, true)
-		if !ok {
+		parsed, err := util.ParseMultipart(w, r, maxMemory, maxSize)
+		if err != nil {
+			common.LogAndWriteError(w, r, "parse multipart", err)
 			return
 		}
 
-		token := auth.PopAccessToken(values)
+		token := auth.PopAccessToken(parsed.Values)
 		if token != "" && auth.GetToken(r.Context()) != nil {
-			if file != nil {
-				file.Close()
-			}
+			parsed.CloseFiles()
 			resp.WriteInvalidRequest(w, "access token must appear in header or body, not both")
 			return
 		}
+
 		r, ok = middleware.EnsureTokenForRequest(st.Cfg, w, r, token)
 		if !ok {
-			if file != nil {
-				file.Close()
-			}
+			parsed.CloseFiles()
 			return
 		}
-		defer file.Close()
 
-		url, err := st.MediaStore.Upload(r.Context(), &file, header)
+		defer parsed.CloseFiles()
+
+		file := parsed.FileByKey("file")
+		if file == nil {
+			resp.WriteInvalidRequest(w, "no file uploaded with field name 'file'")
+			return
+		}
+
+		fileId := uuid.New().String()
+		fileKey, err := st.PathPattern.Generate(fileId)
+		if err != nil {
+			common.LogAndWriteError(w, r, "generate path from pattern", err)
+			return
+		}
+
+		url, err := st.MediaStore.Upload(r.Context(), &file.File, file.Header, fileKey)
 		if err != nil {
 			common.LogAndWriteError(w, r, "upload media", err)
 			return

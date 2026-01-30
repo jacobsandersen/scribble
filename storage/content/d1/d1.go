@@ -42,7 +42,7 @@ func NewD1ContentStore(cfg *config.Content) (*StoreImpl, error) {
 		pagination: &cfg.Pagination,
 		client:     client,
 		table:      storageutil.DeriveTableName(d1Cfg.TablePrefix, "content"),
-		publicURL:  storageutil.NormalizeBaseURL(cfg.PublicUrl),
+		publicURL:  storageutil.NormalizeBaseURL(cfg.PublicBaseUrl),
 	}
 
 	if err := store.initSchema(context.Background()); err != nil {
