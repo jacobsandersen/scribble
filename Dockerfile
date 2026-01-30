@@ -5,7 +5,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o main cmd/scribble.go
 
-FROM alpine:latest AS final
+FROM gcr.io/distroless/base-debian13:nonroot AS final
 WORKDIR /root
 RUN mkdir -p /config
 COPY --from=builder /app/main .
