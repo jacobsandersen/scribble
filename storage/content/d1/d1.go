@@ -167,10 +167,7 @@ func (cs *StoreImpl) Create(ctx context.Context, doc util.Mf2Document) (string, 
 }
 
 func (cs *StoreImpl) Update(ctx context.Context, url string, replacements map[string][]any, additions map[string][]any, deletions any) (string, error) {
-	oldSlug, err := util.SlugFromURL(url)
-	if err != nil {
-		return url, err
-	}
+	oldSlug := util.SlugFromURL(cs.publicURL, url)
 
 	doc, err := cs.getDocBySlug(ctx, oldSlug)
 	if err != nil {
@@ -260,12 +257,7 @@ func (cs *StoreImpl) Undelete(ctx context.Context, url string) (string, error) {
 }
 
 func (cs *StoreImpl) Get(ctx context.Context, url string) (*util.Mf2Document, error) {
-	slug, err := util.SlugFromURL(url)
-	if err != nil {
-		return nil, err
-	}
-
-	return cs.getDocBySlug(ctx, slug)
+	return cs.getDocBySlug(ctx, util.SlugFromURL(cs.publicURL, url))
 }
 
 func (cs *StoreImpl) List(ctx context.Context, page int, limit int) ([]util.Mf2Document, error) {
