@@ -3,7 +3,7 @@ package body
 import (
 	"encoding/json"
 	"fmt"
-	"mime/multipart"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -75,19 +75,10 @@ func (p *QueryParams) Add(key string, value []string) {
 	}
 }
 
-// ParsedBody represents the parsed content from an HTTP request body,
-// including data fields, uploaded files, and access token (if present in body).
 type ParsedBody struct {
 	Data        map[string]any
-	Files       []ParsedFile
+	Files       []util.MultipartFile
 	AccessToken string
-}
-
-// ParsedFile represents a file uploaded as part of a multipart request.
-type ParsedFile struct {
-	File   multipart.File
-	Header *multipart.FileHeader
-	Field  string
 }
 
 func ReadQueryParams(r *http.Request) QueryParams {
@@ -174,19 +165,15 @@ func readFormURLEncoded(cfg *config.Config, w http.ResponseWriter, r *http.Reque
 // form fields and uploaded files.
 func readMultipart(cfg *config.Config, w http.ResponseWriter, r *http.Request) (*ParsedBody, bool) {
 	maxMemory := int64(cfg.Server.Limits.MaxMultipartMem)
-	maxFile := int64(cfg.Server.Limits.MaxFileSize)
-	fields := []string{"photo", "video", "audio", "file"}
-	values, files, ok := util.ParseMultipartFiles(w, r, maxMemory, maxFile, fields, false)
-	if !ok {
+	maxFileSize := int64(cfg.Server.Limits.MaxFileSize)
+
+	parsed, err := util.ParseMultipart(w, r, maxMemory, maxFileSize)
+	if err != nil {
+		log.Println("Error parsing multipart body:", err)
 		return nil, false
 	}
 
-	token := auth.PopAccessToken(values)
+	token := auth.PopAccessToken(parsed.Values)
 
-	parsedFiles := make([]ParsedFile, 0, len(files))
-	for _, f := range files {
-		parsedFiles = append(parsedFiles, ParsedFile{File: f.File, Header: f.Header, Field: f.Field})
-	}
-
-	return &ParsedBody{Data: values, Files: parsedFiles, AccessToken: token}, true
+	return &ParsedBody{Data: parsed.Values, Files: parsed.Files, AccessToken: token}, true
 }

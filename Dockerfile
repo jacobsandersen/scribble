@@ -5,10 +5,10 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o main cmd/scribble.go
 
-FROM alpine:latest AS final
-WORKDIR /root
-RUN mkdir -p /config
-COPY --from=builder /app/main .
+FROM gcr.io/distroless/base-debian13:nonroot AS final
+WORKDIR /home/nonroot
+COPY --from=builder /app/main ./main
+USER nonroot:nonroot
 EXPOSE 9000
 ENV CONFIG_FILE=/config/config.yml
-CMD ["./main"]
+ENTRYPOINT ["/home/nonroot/main"]

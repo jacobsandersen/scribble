@@ -33,30 +33,24 @@ func ValidateIdentifier(fl validator.FieldLevel) bool {
 	return matched
 }
 
-// ValidatePathPattern validates path patterns used for file organization.
-// It prevents path traversal attacks and ensures patterns are relative.
 func ValidatePathPattern(fl validator.FieldLevel) bool {
 	s := fl.Field().String()
 	if s == "" {
-		return true // omitempty will handle this
+		return false
 	}
 
-	// Check for path traversal (..) segments
 	if strings.Contains(s, "..") {
 		return false
 	}
 
-	// Check for absolute paths (Unix or Windows style)
 	if path.IsAbs(s) || filepath.IsAbs(s) {
 		return false
 	}
 
-	// Check for Windows drive letters (C:, D:, etc.)
 	if len(s) >= 2 && s[1] == ':' {
 		return false
 	}
 
-	// Check for null bytes or other dangerous characters
 	if strings.ContainsAny(s, "\x00") {
 		return false
 	}

@@ -3,10 +3,7 @@ package post
 import (
 	"context"
 	"fmt"
-	"mime"
-	"mime/multipart"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -38,29 +35,37 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 			continue
 		}
 
-		mediaProperty := pf.Field
-		if mediaProperty == "" || mediaProperty == "file" {
-			mediaProperty = mediaPropertyForUpload(pf.Header)
+		fileId := uuid.New().String()
+		fileKey, err := st.PathPattern.Generate(fileId)
+		if err != nil {
+			common.LogAndWriteError(w, r, "generate path from pattern", err)
+			return
 		}
 
-		url, err := st.MediaStore.Upload(r.Context(), &pf.File, pf.Header)
+		url, err := st.MediaStore.Upload(r.Context(), &pf.File, pf.Header, fileKey)
 		if err != nil {
 			common.LogAndWriteError(w, r, "upload media", err)
 			return
 		}
 
-		document.Properties[mediaProperty] = append(document.Properties[mediaProperty], url)
+		document.Properties[pf.Field] = append(document.Properties[pf.Field], url)
+
+		pf.File.Close()
 	}
 
-	suggestedSlug := deriveSuggestedSlug(&document)
+	slug, err := st.PathPattern.Generate(deriveSuggestedSlug(&document))
+	if err != nil {
+		common.LogAndWriteError(w, r, "generate path from pattern", err)
+		return
+	}
 
-	finalSlug, err := ensureUniqueSlug(r.Context(), st.ContentStore, suggestedSlug)
+	slug, err = ensureUniqueSlug(r.Context(), st.ContentStore, slug)
 	if err != nil {
 		common.LogAndWriteError(w, r, "slug lookup", err)
 		return
 	}
 
-	document.Properties["slug"] = []any{finalSlug}
+	document.Properties["slug"] = []any{slug}
 
 	timeNow := time.Now().Local().Format(time.RFC3339)
 	if !document.HasProp("created-at") {
@@ -89,10 +94,8 @@ func buildDocument(contentType string, data map[string]any) (util.Mf2Document, e
 	switch contentType {
 	case "application/json":
 		doc = normalizeJson(data)
-	case "application/x-www-form-urlencoded":
-		doc = normalizeFormBody(data)
-		delete(doc.Properties, "access_token")
 	case "multipart/form-data":
+	case "application/x-www-form-urlencoded":
 		doc = normalizeFormBody(data)
 		delete(doc.Properties, "access_token")
 	default:
@@ -310,26 +313,4 @@ func coerceSlice(v any) []any {
 	}
 
 	return out
-}
-
-func mediaPropertyForUpload(header *multipart.FileHeader) string {
-	if header == nil {
-		return "photo"
-	}
-
-	contentType := strings.ToLower(header.Header.Get("Content-Type"))
-	if contentType == "" {
-		if ext := strings.ToLower(filepath.Ext(header.Filename)); ext != "" {
-			contentType = mime.TypeByExtension(ext)
-		}
-	}
-
-	switch {
-	case strings.HasPrefix(contentType, "video/"):
-		return "video"
-	case strings.HasPrefix(contentType, "audio/"):
-		return "audio"
-	default:
-		return "photo"
-	}
 }

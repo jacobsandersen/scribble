@@ -22,7 +22,7 @@ func HandleSource(st *state.ScribbleState, w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		if !util.UrlIsSupported(st.Cfg.Content.PublicUrl, url[0]) {
+		if !util.UrlIsSupported(st.Cfg.Content.PublicBaseUrl, url[0]) {
 			resp.WriteInvalidRequest(w, "Invalid URL (not a supported destination)")
 			return
 		}

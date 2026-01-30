@@ -1,39 +1,60 @@
 package util
 
 import (
-	"fmt"
+	"log"
 	"mime/multipart"
 	"net/http"
-
-	"github.com/indieinfra/scribble/server/resp"
 )
 
-// MultipartFile represents a parsed multipart file part with its field name.
+type MultipartValues map[string]any
+
 type MultipartFile struct {
 	Field  string
 	File   multipart.File
 	Header *multipart.FileHeader
 }
 
-// ParseMultipartWithFile parses a multipart/form-data request with a single expected file field.
-// It delegates to ParseMultipartWithFirstFile to avoid duplication. If requireFile is true, missing
-// files return an invalid_request.
-func ParseMultipartWithFile(w http.ResponseWriter, r *http.Request, maxMemory int64, maxFileSize int64, fileField string, requireFile bool) (map[string]any, multipart.File, *multipart.FileHeader, bool) {
-	values, file, header, _, ok := ParseMultipartWithFirstFile(w, r, maxMemory, maxFileSize, []string{fileField}, requireFile)
-	return values, file, header, ok
+type ParsedMultipart struct {
+	Values MultipartValues
+	Files  []MultipartFile
 }
 
-// ParseMultipartFiles parses a multipart/form-data request and returns all files for the provided
-// field names in the given order. If requireFile is true, missing files write an invalid_request.
-// maxMemory caps the total request body (for ParseMultipartForm) while maxFileSize enforces a per-file limit when > 0.
-func ParseMultipartFiles(w http.ResponseWriter, r *http.Request, maxMemory int64, maxFileSize int64, fileFields []string, requireFile bool) (map[string]any, []MultipartFile, bool) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxMemory)
-	if err := r.ParseMultipartForm(maxMemory); err != nil {
-		WriteInvalidMultipart(w, err)
-		return nil, nil, false
+func (pm *ParsedMultipart) CloseFiles() {
+	for _, mf := range pm.Files {
+		if mf.File != nil {
+			mf.File.Close()
+		}
+	}
+}
+
+func (pm *ParsedMultipart) FileByKey(key string) *MultipartFile {
+	for _, mf := range pm.Files {
+		if mf.Field == key {
+			return &mf
+		}
 	}
 
-	values := make(map[string]any)
+	return nil
+}
+
+func ParseMultipart(w http.ResponseWriter, r *http.Request, maxMemory, maxFileSize int64) (*ParsedMultipart, error) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxMemory)
+	if err := r.ParseMultipartForm(maxMemory); err != nil {
+		return nil, err
+	}
+
+	values := extractValues(r)
+	files := extractFiles(r, maxFileSize)
+
+	return &ParsedMultipart{
+		Values: values,
+		Files:  files,
+	}, nil
+}
+
+func extractValues(r *http.Request) MultipartValues {
+	values := make(MultipartValues)
+
 	if r.MultipartForm != nil {
 		for key, arr := range r.MultipartForm.Value {
 			switch len(arr) {
@@ -51,118 +72,28 @@ func ParseMultipartFiles(w http.ResponseWriter, r *http.Request, maxMemory int64
 		}
 	}
 
+	return values
+}
+
+func extractFiles(r *http.Request, maxFileSize int64) []MultipartFile {
 	var filesOut []MultipartFile
 
-	for _, field := range fileFields {
-		candidates := append([]*multipart.FileHeader{}, r.MultipartForm.File[field]...)
-		candidates = append(candidates, r.MultipartForm.File[field+"[]"]...)
-
-		for _, fh := range candidates {
+	for key, fhs := range r.MultipartForm.File {
+		for _, fh := range fhs {
 			if maxFileSize > 0 && fh.Size > maxFileSize {
-				WriteInvalidMultipart(w, fmt.Errorf("file exceeds max size"))
-				return nil, nil, false
-			}
-
-			if fh.Filename == "" {
-				WriteInvalidMultipart(w, fmt.Errorf("file part is missing filename"))
-				return nil, nil, false
+				log.Println("skipped too large file:", fh.Filename, fh.Size)
+				continue
 			}
 
 			f, err := fh.Open()
 			if err != nil {
-				WriteInvalidMultipart(w, err)
-				return nil, nil, false
-			}
-
-			filesOut = append(filesOut, MultipartFile{Field: field, File: f, Header: fh})
-		}
-	}
-
-	if len(filesOut) == 0 && requireFile {
-		WriteInvalidMultipart(w, fmt.Errorf("missing required file field"))
-		return nil, nil, false
-	}
-
-	return values, filesOut, true
-}
-
-// ParseMultipartWithFirstFile parses a multipart/form-data request, returning the first matching
-// file for the provided field order. The name of the matched field is returned so callers can map
-// to Micropub properties. If requireFile is true, missing files write an invalid_request.
-func ParseMultipartWithFirstFile(w http.ResponseWriter, r *http.Request, maxMemory int64, maxFileSize int64, fileFields []string, requireFile bool) (map[string]any, multipart.File, *multipart.FileHeader, string, bool) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxMemory)
-	if err := r.ParseMultipartForm(maxMemory); err != nil {
-		WriteInvalidMultipart(w, err)
-		return nil, nil, nil, "", false
-	}
-
-	values := make(map[string]any)
-	if r.MultipartForm != nil {
-		for key, arr := range r.MultipartForm.Value {
-			switch len(arr) {
-			case 0:
+				log.Println("skipped file, could not open:", fh.Filename, err)
 				continue
-			case 1:
-				values[key] = arr[0]
-			default:
-				asAny := make([]any, len(arr))
-				for i, v := range arr {
-					asAny[i] = v
-				}
-				values[key] = asAny
 			}
+
+			filesOut = append(filesOut, MultipartFile{Field: key, File: f, Header: fh})
 		}
 	}
 
-	var selectedFile multipart.File
-	var selectedHeader *multipart.FileHeader
-	selectedField := ""
-	fileCount := 0
-
-	for _, field := range fileFields {
-		candidates := append([]*multipart.FileHeader{}, r.MultipartForm.File[field]...)
-		candidates = append(candidates, r.MultipartForm.File[field+"[]"]...)
-		if len(candidates) == 0 {
-			continue
-		}
-
-		fileCount += len(candidates)
-		if fileCount > 1 {
-			WriteInvalidMultipart(w, fmt.Errorf("only one file is allowed per request"))
-			return nil, nil, nil, "", false
-		}
-
-		fh := candidates[0]
-		if maxFileSize > 0 && fh.Size > maxFileSize {
-			WriteInvalidMultipart(w, fmt.Errorf("file exceeds max size"))
-			return nil, nil, nil, "", false
-		}
-
-		if len(fh.Filename) == 0 {
-			WriteInvalidMultipart(w, fmt.Errorf("file part is missing filename"))
-			return nil, nil, nil, "", false
-		}
-
-		f, err := fh.Open()
-		if err != nil {
-			WriteInvalidMultipart(w, err)
-			return nil, nil, nil, "", false
-		}
-
-		selectedFile = f
-		selectedHeader = fh
-		selectedField = field
-	}
-
-	if fileCount == 0 && requireFile {
-		WriteInvalidMultipart(w, fmt.Errorf("missing required file field"))
-		return nil, nil, nil, "", false
-	}
-
-	return values, selectedFile, selectedHeader, selectedField, true
-}
-
-// WriteInvalidMultipart writes a standardized invalid_request for multipart parsing issues.
-func WriteInvalidMultipart(w http.ResponseWriter, err error) {
-	resp.WriteInvalidRequest(w, fmt.Sprintf("failed to read multipart form: %v", err))
+	return filesOut
 }

@@ -23,7 +23,7 @@ func Delete(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 		return
 	}
 
-	if !util.UrlIsSupported(st.Cfg.Content.PublicUrl, url) {
+	if !util.UrlIsSupported(st.Cfg.Content.PublicBaseUrl, url) {
 		resp.WriteInvalidRequest(w, "Invalid URL (not a supported destination)")
 		return
 	}
