@@ -20,11 +20,12 @@ import (
 // StoreImpl implements Store using Cloudflare D1 via the HTTP API.
 // It mirrors the schema of SQLContentStore to keep parity across backends.
 type StoreImpl struct {
-	cfg        *config.D1ContentStrategy
-	pagination *config.Pagination
-	client     *cloudflare.Client
-	table      string
-	publicURL  string
+	cfg           *config.D1ContentStrategy
+	pagination    *config.Pagination
+	client        *cloudflare.Client
+	contentTable  string
+	categoryTable string
+	publicURL     string
 }
 
 // NewD1ContentStore builds a StoreImpl and ensures the schema exists.
@@ -38,11 +39,12 @@ func NewD1ContentStore(cfg *config.Content) (*StoreImpl, error) {
 	client := buildD1Client(d1Cfg)
 
 	store := &StoreImpl{
-		cfg:        d1Cfg,
-		pagination: &cfg.Pagination,
-		client:     client,
-		table:      storageutil.DeriveTableName(d1Cfg.TablePrefix, "content"),
-		publicURL:  storageutil.NormalizeBaseURL(cfg.PublicBaseUrl),
+		cfg:           d1Cfg,
+		pagination:    &cfg.Pagination,
+		client:        client,
+		contentTable:  storageutil.DeriveTableName(d1Cfg.TablePrefix, "content"),
+		categoryTable: storageutil.DeriveTableName(d1Cfg.TablePrefix, "categories"),
+		publicURL:     storageutil.NormalizeBaseURL(cfg.PublicBaseUrl),
 	}
 
 	if err := store.initSchema(context.Background()); err != nil {
@@ -69,32 +71,60 @@ func buildD1Client(cfg *config.D1ContentStrategy) *cloudflare.Client {
 func (cs *StoreImpl) initSchema(ctx context.Context) error {
 	errMsg := "d1 initialization failed: %w"
 
-	_, err := cs.executeQuery(ctx, cs.schemaQuery())
-	if err != nil {
-		return fmt.Errorf(errMsg, err)
+	for _, query := range cs.initQueries() {
+		if _, err := cs.executeQuery(ctx, query); err != nil {
+			return fmt.Errorf(errMsg, err)
+		}
 	}
 
 	return nil
 }
 
-// schemaQuery returns the CREATE TABLE statement for the content table.
-func (cs *StoreImpl) schemaQuery() string {
-	return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (doc TEXT PRIMARY KEY)`, cs.table)
+func (cs *StoreImpl) initQueries() []string {
+	return []string{
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+						id INTEGER PRIMARY KEY, 
+						doc TEXT NOT NULL
+					)`, cs.contentTable),
+		fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS idx_doc_slug ON %s(json_extract(doc, '$.properties.slug'))`, cs.contentTable),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_doc_created ON %s(json_extract(doc, '$.properties.created_at'))`, cs.contentTable),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+						doc_id INTEGER NOT NULL, 
+						category TEXT NOT NULL,
+						PRIMARY KEY (doc_id, category),
+						FOREIGN KEY (doc_id) REFERENCES %s(id) ON DELETE CASCADE
+					) 
+					`, cs.categoryTable, cs.contentTable),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_category_value ON %s(category)`, cs.categoryTable),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_category_cover ON %s(category, doc_id)`, cs.categoryTable),
+		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS trg_add_categories
+						AFTER INSERT ON %s
+						BEGIN
+							INSERT INTO %s (doc_id, category) SELECT NEW.id, json_each.value FROM json_each(NEW.doc, '$.properties.category');
+						END`, cs.contentTable, cs.categoryTable),
+		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS trg_update_categories
+						AFTER UPDATE OF doc ON %s
+						WHEN json_extract(OLD.doc, '$.properties.category') IS NOT json_extract(NEW.doc, '$.properties.category')
+						BEGIN
+							DELETE FROM %s WHERE doc_id = OLD.id;
+							INSERT INTO %s (doc_id, category) SELECT NEW.id, json_each.value FROM json_each(NEW.doc, '$.properties.category');
+						END`, cs.contentTable, cs.categoryTable, cs.categoryTable),
+	}
 }
 
 // insertQuery builds the SQL for creating a new document.
 func (cs *StoreImpl) insertQuery() string {
-	return fmt.Sprintf("INSERT INTO %s (doc) VALUES (?)", cs.table)
+	return fmt.Sprintf("INSERT INTO %s (doc) VALUES (?)", cs.contentTable)
 }
 
 // updateQuery builds the SQL for updating an existing document.
 func (cs *StoreImpl) updateQuery() string {
-	return fmt.Sprintf("UPDATE %s SET doc = ? WHERE json_extract(doc, '$.properties.slug') = json_array(?)", cs.table)
+	return fmt.Sprintf("UPDATE %s SET doc = ? WHERE json_extract(doc, '$.properties.slug') = json_array(?)", cs.contentTable)
 }
 
 // selectQuery builds the SQL for retrieving a document by slug.
 func (cs *StoreImpl) selectQuery() string {
-	return fmt.Sprintf("SELECT doc FROM %s WHERE json_extract(doc, '$.properties.slug') = json_array(?) LIMIT 1", cs.table)
+	return fmt.Sprintf("SELECT doc FROM %s WHERE json_extract(doc, '$.properties.slug') = json_array(?) LIMIT 1", cs.contentTable)
 }
 
 func (cs *StoreImpl) normalizePagination(page int, limit int) (int, int, int) {
@@ -118,7 +148,7 @@ func (cs *StoreImpl) normalizePagination(page int, limit int) (int, int, int) {
 func (cs *StoreImpl) selectMultipleQuery(page int, limit int) string {
 	page, limit, offset := cs.normalizePagination(page, limit)
 
-	query := "SELECT doc FROM " + cs.table
+	query := "SELECT doc FROM " + cs.contentTable
 	if cs.pagination.Enabled {
 		query = fmt.Sprintf("%s LIMIT %d,%d", query, offset, cs.pagination.PerPage)
 	}
@@ -129,9 +159,10 @@ func (cs *StoreImpl) selectMultipleQuery(page int, limit int) string {
 func (cs *StoreImpl) selectCategoriesQuery(page int, limit int, withFilter bool) string {
 	page, limit, offset := cs.normalizePagination(page, limit)
 
-	query := fmt.Sprintf("SELECT DISTINCT c.value AS category FROM %s AS d JOIN json_each(d.doc, '$.properties.category') AS c", cs.table)
+	query := fmt.Sprintf("SELECT DISTINCT category FROM %s", cs.categoryTable)
+
 	if withFilter {
-		query = fmt.Sprintf("%s WHERE c.value LIKE ? || '%%'", query)
+		query = fmt.Sprintf("%s WHERE category LIKE ? || '%%'", query)
 	}
 
 	if cs.pagination.Enabled {
@@ -143,7 +174,7 @@ func (cs *StoreImpl) selectCategoriesQuery(page int, limit int, withFilter bool)
 
 // existsQuery builds the SQL for checking if a slug exists.
 func (cs *StoreImpl) existsQuery() string {
-	return fmt.Sprintf("SELECT 1 FROM %s WHERE json_extract(doc, '$.properties.slug') = json_array(?) LIMIT 1", cs.table)
+	return fmt.Sprintf("SELECT 1 FROM %s WHERE json_extract(doc, '$.properties.slug') = json_array(?) LIMIT 1", cs.contentTable)
 }
 
 func (cs *StoreImpl) Create(ctx context.Context, doc util.Mf2Document) (string, bool, error) {
@@ -210,7 +241,7 @@ func (cs *StoreImpl) Update(ctx context.Context, url string, replacements map[st
 	// 3. DELETE the old row
 	// 4. If DELETE fails, DELETE the new row (rollback) to restore original state
 	if newSlug != oldSlug {
-		deleteQuery := fmt.Sprintf("DELETE FROM %s WHERE json_extract(doc, '$.properties.slug') = json_array(?)", cs.table)
+		deleteQuery := fmt.Sprintf("DELETE FROM %s WHERE json_extract(doc, '$.properties.slug') = json_array(?)", cs.contentTable)
 
 		// Step 1: Insert new row
 		if _, err := cs.executeQuery(ctx, cs.insertQuery(), string(payload)); err != nil {

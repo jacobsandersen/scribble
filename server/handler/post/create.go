@@ -238,7 +238,11 @@ func normalizeFormBody(props map[string]any) util.Mf2Document {
 			continue
 		}
 
-		doc.Properties[key] = values
+		if _, exists := doc.Properties[key]; !exists {
+			doc.Properties[key] = values
+		} else {
+			doc.Properties[key] = append(doc.Properties[key], values...)
+		}
 	}
 
 	return doc
