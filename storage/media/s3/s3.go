@@ -47,6 +47,7 @@ func NewS3MediaStore(cfg *config.Media) (*StoreImpl, error) {
 	if strings.EqualFold(region, "auto") {
 		region = ""
 	}
+
 	endpointHost := strings.TrimSpace(s3cfg.Endpoint)
 	if endpointHost == "" {
 		if region == "" {
@@ -60,18 +61,15 @@ func NewS3MediaStore(cfg *config.Media) (*StoreImpl, error) {
 		}
 	}
 
-	secure := !s3cfg.DisableSSL
 	lookup := minio.BucketLookupAuto
-	if s3cfg.ForcePathStyle {
-		lookup = minio.BucketLookupPath
-	}
 
 	client, err := newMinioClient(endpointHost, &minio.Options{
 		Creds:        credentials.NewStaticV4(s3cfg.AccessKeyId, s3cfg.SecretKeyId, ""),
-		Secure:       secure,
+		Secure:       true,
 		Region:       region,
 		BucketLookup: lookup,
 	})
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create s3 client: %w", err)
 	}
@@ -83,19 +81,17 @@ func NewS3MediaStore(cfg *config.Media) (*StoreImpl, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify s3 bucket %q: %w", s3cfg.Bucket, err)
 	}
+
 	if !exists {
 		return nil, fmt.Errorf("s3 bucket %q does not exist or is not accessible", s3cfg.Bucket)
 	}
 
 	return &StoreImpl{
-		client:         client,
-		bucket:         s3cfg.Bucket,
-		prefix:         strings.TrimPrefix(s3cfg.Prefix, "/"),
-		publicBase:     strings.TrimSuffix(s3cfg.PublicUrl, "/"),
-		forcePathStyle: s3cfg.ForcePathStyle,
-		endpointHost:   endpointHost,
-		secure:         secure,
-		region:         s3cfg.Region,
+		client:       client,
+		bucket:       s3cfg.Bucket,
+		publicBase:   strings.TrimSuffix(cfg.PublicBaseUrl, "/"),
+		endpointHost: endpointHost,
+		region:       s3cfg.Region,
 	}, nil
 }
 
@@ -127,36 +123,13 @@ func (s *StoreImpl) Delete(ctx context.Context, urlStr string) error {
 }
 
 func (s *StoreImpl) objectURL(key string) string {
-	if s.publicBase != "" {
-		return s.publicBase + "/" + key
-	}
-
-	scheme := "https"
-	if !s.secure {
-		scheme = "http"
-	}
-
-	if s.forcePathStyle {
-		return fmt.Sprintf("%s://%s/%s/%s", scheme, s.endpointHost, s.bucket, key)
-	}
-
-	return fmt.Sprintf("%s://%s.%s/%s", scheme, s.bucket, s.endpointHost, key)
+	return fmt.Sprintf("%s%s", s.publicBase, key)
 }
 
 func (s *StoreImpl) keyFromURL(urlStr string) (string, error) {
-	u, err := url.Parse(urlStr)
-	if err != nil {
-		return "", fmt.Errorf("invalid media url: %w", err)
+	if !strings.HasPrefix(urlStr, s.publicBase) {
+		return "", fmt.Errorf("url does not belong to this media store")
 	}
 
-	key := strings.TrimPrefix(u.Path, "/")
-	if strings.HasPrefix(key, s.bucket+"/") {
-		key = strings.TrimPrefix(key, s.bucket+"/")
-	}
-
-	if key == "" {
-		return "", fmt.Errorf("could not derive object key from url")
-	}
-
-	return key, nil
+	return strings.TrimPrefix(urlStr, s.publicBase), nil
 }

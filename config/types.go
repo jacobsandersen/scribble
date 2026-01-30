@@ -48,18 +48,16 @@ type D1ContentStrategy struct {
 }
 
 type Media struct {
-	Strategy string           `mapstructure:"strategy" validate:"required,oneof=s3"`
-	S3       *S3MediaStrategy `mapstructure:"s3" validate:"required_if=Strategy s3"`
+	Strategy         string           `mapstructure:"strategy" validate:"required,oneof=s3"`
+	PublicBaseUrl    string           `mapstructure:"public_base_url" validate:"required,url"`
+	MediaPathPattern string           `mapstructure:"media_path_pattern" validate:"required,pathpattern"`
+	S3               *S3MediaStrategy `mapstructure:"s3" validate:"required_if=Strategy s3"`
 }
 
 type S3MediaStrategy struct {
-	AccessKeyId    string `mapstructure:"access_key_id" validate:"required"`
-	SecretKeyId    string `mapstructure:"secret_key_id" validate:"required"`
-	Region         string `mapstructure:"region" validate:"omitempty"`
-	Bucket         string `mapstructure:"bucket" validate:"required"`
-	Endpoint       string `mapstructure:"endpoint" validate:"omitempty,url"`
-	ForcePathStyle bool   `mapstructure:"force_path_style"`
-	DisableSSL     bool   `mapstructure:"disable_ssl"`
-	Prefix         string `mapstructure:"prefix"`
-	PublicUrl      string `mapstructure:"public_url" validate:"omitempty,url"`
+	AccessKeyId string `mapstructure:"access_key_id" validate:"required"`
+	SecretKeyId string `mapstructure:"secret_key_id" validate:"required"`
+	Region      string `mapstructure:"region" validate:"omitempty"`
+	Bucket      string `mapstructure:"bucket" validate:"required"`
+	Endpoint    string `mapstructure:"endpoint" validate:"omitempty,url"`
 }

@@ -36,7 +36,7 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 		}
 
 		fileId := uuid.New().String()
-		fileKey, err := st.PathPattern.Generate(fileId)
+		fileKey, err := st.MediaPathPattern.Generate(fileId)
 		if err != nil {
 			common.LogAndWriteError(w, r, "generate path from pattern", err)
 			return
@@ -53,7 +53,7 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 		pf.File.Close()
 	}
 
-	slug, err := st.PathPattern.Generate(deriveSuggestedSlug(&document))
+	slug, err := st.ContentPathPattern.Generate(deriveSuggestedSlug(&document))
 	if err != nil {
 		common.LogAndWriteError(w, r, "generate path from pattern", err)
 		return
