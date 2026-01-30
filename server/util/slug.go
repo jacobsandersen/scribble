@@ -1,7 +1,6 @@
 package util
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/gosimple/slug"
@@ -64,20 +63,8 @@ func GenerateSlug(doc Mf2Document) string {
 	return generatedSlug
 }
 
-// SlugFromURL extracts the final path segment from a URL-like string.
-// Returns an error if the slug is empty.
-func SlugFromURL(raw string) (string, error) {
-	parts := strings.Split(strings.TrimSuffix(raw, "/"), "/")
-	if len(parts) == 0 {
-		return "", fmt.Errorf("invalid url")
-	}
-
-	slug := parts[len(parts)-1]
-	if slug == "" {
-		return "", fmt.Errorf("url does not have a valid slug")
-	}
-
-	return slug, nil
+func SlugFromURL(publicUrl string, url string) string {
+	return strings.TrimPrefix(url, publicUrl)
 }
 
 // extractTextFromProperty extracts text from a property value ([]any)
