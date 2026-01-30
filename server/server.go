@@ -70,7 +70,8 @@ func StartServer(cfg *config.Config) error {
 }
 
 func initialize(st *state.ScribbleState) (*state.ScribbleState, error) {
-	st.PathPattern = util.NewPathPattern(st.Cfg.Content.ContentPathPattern)
+	st.ContentPathPattern = util.NewPathPattern(st.Cfg.Content.ContentPathPattern)
+	st.MediaPathPattern = util.NewPathPattern(st.Cfg.Media.MediaPathPattern)
 
 	contentStore, err := initializeContentStore(&st.Cfg.Content)
 	if err != nil {

@@ -8,8 +8,9 @@ import (
 )
 
 type ScribbleState struct {
-	Cfg          *config.Config
-	PathPattern  *util.PathPattern
-	ContentStore content.Store
-	MediaStore   media.Store
+	Cfg                *config.Config
+	ContentPathPattern *util.PathPattern
+	MediaPathPattern   *util.PathPattern
+	ContentStore       content.Store
+	MediaStore         media.Store
 }

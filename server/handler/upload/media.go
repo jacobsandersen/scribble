@@ -49,7 +49,7 @@ func HandleMediaUpload(st *state.ScribbleState) http.HandlerFunc {
 		}
 
 		fileId := uuid.New().String()
-		fileKey, err := st.PathPattern.Generate(fileId)
+		fileKey, err := st.MediaPathPattern.Generate(fileId)
 		if err != nil {
 			common.LogAndWriteError(w, r, "generate path from pattern", err)
 			return
