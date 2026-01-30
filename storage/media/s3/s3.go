@@ -13,6 +13,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/indieinfra/scribble/config"
+	"github.com/indieinfra/scribble/storage/util"
 )
 
 // StoreImpl uploads media to S3 or any compatible service (R2, Backblaze, MinIO).
@@ -89,7 +90,7 @@ func NewS3MediaStore(cfg *config.Media) (*StoreImpl, error) {
 	return &StoreImpl{
 		client:       client,
 		bucket:       s3cfg.Bucket,
-		publicBase:   strings.TrimSuffix(cfg.PublicBaseUrl, "/"),
+		publicBase:   util.NormalizeBaseURL(cfg.PublicBaseUrl),
 		endpointHost: endpointHost,
 		region:       s3cfg.Region,
 	}, nil
