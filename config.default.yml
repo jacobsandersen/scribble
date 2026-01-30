@@ -39,7 +39,7 @@ content:
   public_base_url: "https://example.org/"
   # The path pattern used to build content slugs; this will be appended to the public_base_url after replacement.
   # Supports {year}, {month}, {day}, and {slug} placeholders. Slug is always required!
-  content_path_pattern: "{year}/{month}/{slug}"
+  content_path_pattern: "{year}/{month}/{day}/{slug}"
   pagination:
     # Whether to paginate source list queries (recommended; default true)
     enabled: true
@@ -58,7 +58,7 @@ media:
   public_base_url: "https://media.example.org/"
   # The path pattern used to build media URLs; this will be appended to the public_base_url after replacement.
   # Supports {year}, {month}, {day}, and {slug} placeholders. Slug is always required!
-  media_path_pattern: "{year}/{month}/{slug}"
+  media_path_pattern: "{year}/{month}/{day}/{slug}"
   s3:
     access_key_id: "replaceme"
     secret_key_id: "replaceme"
