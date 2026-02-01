@@ -70,8 +70,17 @@ func StartServer(cfg *config.Config) error {
 }
 
 func initialize(st *state.ScribbleState) (*state.ScribbleState, error) {
-	st.ContentPathPattern = util.NewPathPattern(st.Cfg.Content.ContentPathPattern)
-	st.MediaPathPattern = util.NewPathPattern(st.Cfg.Media.MediaPathPattern)
+	pat, err := util.NewContentPathPattern(st.Cfg.Content.ContentUrl)
+	if err != nil {
+		return nil, fmt.Errorf("invalid content path pattern: %w", err)
+	}
+	st.ContentPathPattern = pat
+
+	pat, err = util.NewMediaPathPattern(st.Cfg.Media.MediaUrl)
+	if err != nil {
+		return nil, fmt.Errorf("invalid media path pattern: %w", err)
+	}
+	st.MediaPathPattern = pat
 
 	contentStore, err := initializeContentStore(&st.Cfg.Content)
 	if err != nil {

@@ -25,6 +25,20 @@ func (d *Mf2Document) AddProp(key string, value any) {
 	}
 }
 
+func (d *Mf2Document) SetProp(key string, value any) {
+	d.Properties[key] = []any{value}
+}
+
+func (d *Mf2Document) GetFirstStringProp(key string) (string, bool) {
+	values, ok := d.Properties[key]
+	if !ok || len(values) == 0 {
+		return "", false
+	}
+
+	s, ok := values[0].(string)
+	return s, ok
+}
+
 func ValidateMf2(doc Mf2Document) error {
 	if len(doc.Type) == 0 {
 		return errors.New("mf2 type array must not be empty")

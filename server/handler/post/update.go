@@ -3,12 +3,15 @@ package post
 import (
 	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/indieinfra/scribble/server/auth"
 	"github.com/indieinfra/scribble/server/handler/common"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/server/util"
+	"github.com/indieinfra/scribble/storage/content"
 )
 
 func Update(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, data map[string]any) {
@@ -28,8 +31,14 @@ func Update(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 		return
 	}
 
-	if !util.UrlIsSupported(st.Cfg.Content.PublicBaseUrl, url) {
+	if !util.UrlIsInstance(st.Cfg.Content.ContentUrl, url) {
 		resp.WriteInvalidRequest(w, "Invalid URL (not a supported destination)")
+		return
+	}
+
+	oldSlug, err := util.GetSlug(st.Cfg.Content.ContentUrl, url)
+	if err != nil {
+		resp.WriteInvalidRequest(w, fmt.Sprintf("Could not extract slug from URL: %v", err))
 		return
 	}
 
@@ -51,17 +60,40 @@ func Update(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 		return
 	}
 
-	newUrl, err := st.ContentStore.Update(r.Context(), url, replacements, additions, deletions)
+	doc, err := st.ContentStore.Update(r.Context(), url, replacements, additions, deletions)
 	if err != nil {
 		common.LogAndWriteError(w, r, "update content", err)
 		return
 	}
 
-	if newUrl != url {
-		resp.WriteCreated(w, newUrl)
-	} else {
-		resp.WriteNoContent(w)
+	slug, err := content.ExtractSlug(*doc)
+	if err != nil {
+		common.LogAndWriteError(w, r, "extract slug after update", err)
+		resp.WriteNoContent(w) // Pray and return; we don't know if the URL changed
+		return
 	}
+
+	if !strings.EqualFold(slug, oldSlug) {
+		timeCreatedStr, ok := doc.GetFirstStringProp("created_at")
+		if !ok {
+			common.LogAndWriteError(w, r, "get created_at after slug change", fmt.Errorf("missing created_at property"))
+			resp.WriteNoContent(w) // We know the url changed, but can't generate the new one without created_at
+			return
+		}
+
+		timeCreated, err := time.ParseInLocation(time.RFC3339, timeCreatedStr, time.Local)
+		if err != nil {
+			common.LogAndWriteError(w, r, "parse created_at after slug change", err)
+			resp.WriteNoContent(w) // We know the url changed, but can't generate the new one without (valid!) created_at
+			return
+		}
+
+		newUrl, _ := st.ContentPathPattern.GenerateContent(timeCreated, slug)
+		resp.WriteCreated(w, newUrl)
+		return
+	}
+
+	resp.WriteNoContent(w)
 }
 
 func getStringField(data map[string]any, key string) (string, error) {

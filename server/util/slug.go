@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/gosimple/slug"
@@ -63,8 +64,33 @@ func GenerateSlug(doc Mf2Document) string {
 	return generatedSlug
 }
 
-func SlugFromURL(publicUrl string, url string) string {
-	return strings.TrimPrefix(url, publicUrl)
+// SlugFromURL extracts the {slug} from a full URL based on the given pattern.
+// Given a pattern like "domain.com/{year}/{month}/{slug}" and a URL like "domain.com/2024/06/my-post",
+// this function extracts "my-post" as the slug. If the pattern does not contain {slug}, this is an error.
+// If the url is not an instance of the pattern, this is an error.
+func SlugFromURL(pattern string, url string) (string, error) {
+	if !strings.Contains(pattern, "{slug}") {
+		return "", errors.New("Pattern did not contain expected {slug} parameter")
+	}
+	partsPattern := strings.Split(pattern, "/")
+	partsURL := strings.Split(url, "/")
+	if len(partsPattern) != len(partsURL) {
+		return "", errors.New("URL did not match expected pattern")
+	}
+
+	var slugValue string
+	for i, partPattern := range partsPattern {
+		if partPattern == "{slug}" {
+			slugValue = partsURL[i]
+			break
+		}
+	}
+
+	if slugValue == "" {
+		return "", errors.New("Could not find slug in URL based on pattern")
+	}
+
+	return slugValue, nil
 }
 
 // extractTextFromProperty extracts text from a property value ([]any)
