@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func UrlIsInstance(pattern string, needle string) bool {
+func UrlIsInstance(pattern, needle string) bool {
 	normalizedPattern := strings.ReplaceAll(pattern, "\\", "/")
 	normalizedNeedle := strings.ReplaceAll(needle, "\\", "/")
 
@@ -78,7 +78,7 @@ func GetUrlPath(urlInst string) (string, error) {
 	return strings.Trim(parsed.Path, "/"), nil
 }
 
-func GetVariable(pattern string, urlInst string, varName string) (string, error) {
+func GetVariable(pattern, urlInst, varName string) (string, error) {
 	if varName == "" {
 		return "", errors.New("variable name must be provided")
 	}

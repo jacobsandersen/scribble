@@ -68,7 +68,7 @@ func GenerateSlug(doc Mf2Document) string {
 // Given a pattern like "domain.com/{year}/{month}/{slug}" and a URL like "domain.com/2024/06/my-post",
 // this function extracts "my-post" as the slug. If the pattern does not contain {slug}, this is an error.
 // If the url is not an instance of the pattern, this is an error.
-func SlugFromURL(pattern string, url string) (string, error) {
+func SlugFromURL(pattern, url string) (string, error) {
 	if !strings.Contains(pattern, "{slug}") {
 		return "", errors.New("Pattern did not contain expected {slug} parameter")
 	}

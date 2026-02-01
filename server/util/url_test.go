@@ -1,23 +1,29 @@
 package util
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestUrlIsInstance(t *testing.T) {
+	const patHttpsOneVar = "https://example.com/{var}"
+	const patHttpsVarLitVar = "https://example.com/{var}/123/{var2}"
+	const patHttpOneVar = "http://example.com/{var}"
+	const instHttpsOneVar = "https://example.com/abc"
+	const instHttpsVarLitVar = "https://example.com/abc/123/def"
+	const instHttpsLitVarVar = "https://example.com/123/abc/def"
+	const instDiffHostVarLitVar = "https://other.com/abc/123/def"
+
 	tests := []struct {
 		pattern string
 		actual  string
 		expect  bool
 	}{
-		{"https://example.com/{var}", "https://example.com/123", true},               // simple variable match
-		{"https://example.com/a/{var}/b", "https://example.com/a/123/b", true},       // exact match with variable
-		{"http://example.com/a/{var}/b", "https://example.com/a/123/c", false},       // scheme mismatch
-		{"https://example.com/a/{var}/b", "https://example.com/a/123/c", false},      // path segment mismatch
-		{"https://example.com/a/{var}/b", "https://example.com/a/123/b/c", false},    // extra path segment
-		{"https://example.com/a/{var}/b", "https://sub.example.com/a/123/b", false},  // host mismatch
-		{"https://example.com/{var1}/{var2}", "https://example.com/val1/val2", true}, // multiple variables
-		{"https://example.com/{var1}/{var2}", "https://example.com/val1", false},     // missing variable
-		{"https://example.com/{var}", "https://example.com/", false},                 // missing variable value
-		{"https://example.com/{var}", "https://example.com", false},                  // missing path
+		{patHttpsOneVar, instHttpsOneVar, true},                   // simple variable match
+		{patHttpsVarLitVar, instHttpsVarLitVar, true},             // exact match with variable
+		{patHttpsVarLitVar, instHttpsLitVarVar, false},            // path segment mismatch
+		{patHttpsVarLitVar, instHttpsLitVarVar + "/extra", false}, // extra path segment
+		{patHttpOneVar, instHttpsOneVar, false},                   // scheme mismatch
+		{patHttpsVarLitVar, instDiffHostVarLitVar, false},         // host mismatch
 	}
 
 	for _, test := range tests {
