@@ -11,4 +11,5 @@ COPY --from=builder /app/main ./main
 USER nonroot:nonroot
 EXPOSE 9000
 ENV CONFIG_FILE=/config/config.yml
+ENV TZ=UTC
 ENTRYPOINT ["/home/nonroot/main"]
