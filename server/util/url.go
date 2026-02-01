@@ -116,6 +116,6 @@ func GetVariable(pattern, urlInst, varName string) (string, error) {
 	return "", errors.New("pattern did not contain expected variable parameter")
 }
 
-func GetSlug(pattern string, urlInst string) (string, error) {
+func GetSlug(pattern, urlInst string) (string, error) {
 	return GetVariable(pattern, urlInst, "slug")
 }
