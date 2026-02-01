@@ -2,8 +2,8 @@ package upload
 
 import (
 	"net/http"
+	"time"
 
-	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/server/auth"
 	"github.com/indieinfra/scribble/server/handler/common"
 	"github.com/indieinfra/scribble/server/middleware"
@@ -48,19 +48,19 @@ func HandleMediaUpload(st *state.ScribbleState) http.HandlerFunc {
 			return
 		}
 
-		fileId := uuid.New().String()
-		fileKey, err := st.MediaPathPattern.Generate(fileId)
+		fileUrl := st.MediaPathPattern.GenerateMedia(time.Now().Local(), file.FileExtension)
+		fileKey, err := util.GetUrlPath(fileUrl)
 		if err != nil {
 			common.LogAndWriteError(w, r, "generate path from pattern", err)
 			return
 		}
 
-		url, err := st.MediaStore.Upload(r.Context(), &file.File, file.Header, fileKey)
+		err = st.MediaStore.Upload(r.Context(), file, fileKey)
 		if err != nil {
 			common.LogAndWriteError(w, r, "upload media", err)
 			return
 		}
 
-		resp.WriteCreated(w, url)
+		resp.WriteCreated(w, fileUrl)
 	}
 }

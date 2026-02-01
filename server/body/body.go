@@ -77,7 +77,7 @@ func (p *QueryParams) Add(key string, value []string) {
 
 type ParsedBody struct {
 	Data        map[string]any
-	Files       []util.MultipartFile
+	Files       []*util.MultipartFile
 	AccessToken string
 }
 

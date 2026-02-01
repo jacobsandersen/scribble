@@ -27,11 +27,10 @@ type Micropub struct {
 }
 
 type Content struct {
-	Strategy           string             `mapstructure:"strategy" validate:"required,oneof=d1"`
-	PublicBaseUrl      string             `mapstructure:"public_base_url" validate:"required,url"`
-	ContentPathPattern string             `mapstructure:"content_path_pattern" validate:"required,pathpattern"`
-	Pagination         Pagination         `mapstructure:"pagination" validate:"required"`
-	D1                 *D1ContentStrategy `mapstructure:"d1" validate:"required_if=Strategy d1"`
+	ContentUrl string             `mapstructure:"content_url" validate:"required,url"`
+	Pagination Pagination         `mapstructure:"pagination" validate:"required"`
+	Strategy   string             `mapstructure:"strategy" validate:"required,oneof=d1"`
+	D1         *D1ContentStrategy `mapstructure:"d1" validate:"required_if=Strategy d1"`
 }
 
 type Pagination struct {
@@ -48,10 +47,9 @@ type D1ContentStrategy struct {
 }
 
 type Media struct {
-	Strategy         string           `mapstructure:"strategy" validate:"required,oneof=s3"`
-	PublicBaseUrl    string           `mapstructure:"public_base_url" validate:"required,url"`
-	MediaPathPattern string           `mapstructure:"media_path_pattern" validate:"required,pathpattern"`
-	S3               *S3MediaStrategy `mapstructure:"s3" validate:"required_if=Strategy s3"`
+	MediaUrl string           `mapstructure:"media_url" validate:"required,url"`
+	Strategy string           `mapstructure:"strategy" validate:"required,oneof=s3"`
+	S3       *S3MediaStrategy `mapstructure:"s3" validate:"required_if=Strategy s3"`
 }
 
 type S3MediaStrategy struct {

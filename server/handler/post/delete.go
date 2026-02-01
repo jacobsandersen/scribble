@@ -23,7 +23,7 @@ func Delete(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 		return
 	}
 
-	if !util.UrlIsSupported(st.Cfg.Content.PublicBaseUrl, url) {
+	if !util.UrlIsInstance(st.Cfg.Content.ContentUrl, url) {
 		resp.WriteInvalidRequest(w, "Invalid URL (not a supported destination)")
 		return
 	}
@@ -33,7 +33,7 @@ func Delete(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 			return
 		}
 
-		if _, err := st.ContentStore.Undelete(r.Context(), url); err != nil {
+		if err := st.ContentStore.Undelete(r.Context(), url); err != nil {
 			common.LogAndWriteError(w, r, "undelete content", err)
 		} else {
 			resp.WriteNoContent(w)
@@ -43,7 +43,7 @@ func Delete(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 			return
 		}
 
-		if _, err := st.ContentStore.Delete(r.Context(), url); err != nil {
+		if err := st.ContentStore.Delete(r.Context(), url); err != nil {
 			common.LogAndWriteError(w, r, "delete content", err)
 		} else {
 			resp.WriteNoContent(w)

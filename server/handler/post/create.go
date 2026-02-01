@@ -1,7 +1,6 @@
 package post
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -35,53 +34,56 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 			continue
 		}
 
-		fileId := uuid.New().String()
-		fileKey, err := st.MediaPathPattern.Generate(fileId)
+		objectUrl := st.MediaPathPattern.GenerateMedia(time.Now(), pf.FileExtension)
+		objectKey, err := util.GetUrlPath(objectUrl)
 		if err != nil {
-			common.LogAndWriteError(w, r, "generate path from pattern", err)
+			common.LogAndWriteError(w, r, "derive s3 object key", err)
 			return
 		}
 
-		url, err := st.MediaStore.Upload(r.Context(), &pf.File, pf.Header, fileKey)
+		err = st.MediaStore.Upload(r.Context(), pf, strings.TrimPrefix(objectUrl, objectKey))
 		if err != nil {
 			common.LogAndWriteError(w, r, "upload media", err)
 			return
 		}
 
-		document.Properties[pf.Field] = append(document.Properties[pf.Field], url)
+		document.Properties[pf.Field] = append(document.Properties[pf.Field], objectUrl)
 
 		pf.File.Close()
 	}
 
-	slug, err := st.ContentPathPattern.Generate(deriveSuggestedSlug(&document))
+	timeNow := time.Now().Local()
+	timeStr := timeNow.Format(time.RFC3339)
+
+	slug, err := content.EnsureUniqueSlug(r.Context(), st.ContentStore, deriveSuggestedSlug(&document))
 	if err != nil {
-		common.LogAndWriteError(w, r, "generate path from pattern", err)
+		common.LogAndWriteError(w, r, "slug creation", err)
 		return
 	}
 
-	slug, err = ensureUniqueSlug(r.Context(), st.ContentStore, slug)
-	if err != nil {
-		common.LogAndWriteError(w, r, "slug lookup", err)
-		return
-	}
+	document.SetProp("slug", slug)
 
-	document.Properties["slug"] = []any{slug}
-
-	timeNow := time.Now().Local().Format(time.RFC3339)
 	if !document.HasProp("created-at") {
-		document.AddProp("created-at", timeNow)
-	}
-	if !document.HasProp("updated-at") {
-		document.AddProp("updated-at", timeNow)
+		document.SetProp("created-at", timeStr)
 	}
 
-	url, now, err := st.ContentStore.Create(r.Context(), document)
+	if !document.HasProp("updated-at") {
+		document.SetProp("updated-at", timeStr)
+	}
+
+	immediate, err := st.ContentStore.Create(r.Context(), document)
 	if err != nil {
 		common.LogAndWriteError(w, r, "create content", err)
 		return
 	}
 
-	if now {
+	url, err := st.ContentPathPattern.GenerateContent(timeNow, slug)
+	if err != nil {
+		common.LogAndWriteError(w, r, "generate content URL", err)
+		return
+	}
+
+	if immediate {
 		resp.WriteCreated(w, url)
 	} else {
 		resp.WriteAccepted(w, url)
@@ -120,23 +122,6 @@ func deriveSuggestedSlug(doc *util.Mf2Document) string {
 	}
 
 	return uuid.NewString()
-}
-
-func ensureUniqueSlug(ctx context.Context, store content.Store, slug string) (string, error) {
-	exists, err := store.ExistsBySlug(ctx, slug)
-	if err != nil {
-		return "", err
-	}
-	if !exists {
-		return slug, nil
-	}
-
-	suffix, err := uuid.NewRandom()
-	if err != nil {
-		return "", err
-	}
-
-	return slug + "-" + suffix.String(), nil
 }
 
 func normalizeJson(input map[string]any) util.Mf2Document {
