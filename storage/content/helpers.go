@@ -59,9 +59,7 @@ func ApplyMutations(doc *util.Mf2Document, replacements map[string][]any, additi
 		replacements = map[string][]any{}
 	}
 
-	if _, ok := replacements["updated-at"]; !ok {
-		replacements["updated-at"] = []any{util.CurrentLocalTimeRFC3339()}
-	}
+	replacements["updated_at"] = []any{util.CurrentLocalTimeRFC3339()}
 
 	maps.Copy(doc.Properties, replacements)
 

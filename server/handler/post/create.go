@@ -63,12 +63,12 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 
 	document.SetProp("slug", slug)
 
-	if !document.HasProp("created-at") {
-		document.SetProp("created-at", timeStr)
+	if !document.HasProp("created_at") {
+		document.SetProp("created_at", timeStr)
 	}
 
-	if !document.HasProp("updated-at") {
-		document.SetProp("updated-at", timeStr)
+	if !document.HasProp("updated_at") {
+		document.SetProp("updated_at", timeStr)
 	}
 
 	immediate, err := st.ContentStore.Create(r.Context(), document)
