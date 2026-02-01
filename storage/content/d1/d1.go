@@ -75,7 +75,7 @@ func (cs *StoreImpl) initQueries() []string {
 						id INTEGER PRIMARY KEY, 
 						doc TEXT NOT NULL
 					)`, cs.contentTable),
-		fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS idx_doc_slug ON %s(json_extract(doc, '$.properties.slug'))`, cs.contentTable),
+		fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS idx_doc_slug ON %s(json_extract(doc, '$.properties.slug[0]'))`, cs.contentTable),
 		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_doc_created ON %s(json_extract(doc, '$.properties.created_at'))`, cs.contentTable),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 						doc_id INTEGER NOT NULL, 
