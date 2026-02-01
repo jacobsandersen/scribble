@@ -52,8 +52,8 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 		pf.File.Close()
 	}
 
-	timeNow := time.Now().Local()
-	timeStr := timeNow.Format(time.RFC3339)
+	timeNow := util.CurrentLocalTime()
+	timeStr := util.TimeToRFC3339(&timeNow)
 
 	slug, err := content.EnsureUniqueSlug(r.Context(), st.ContentStore, deriveSuggestedSlug(&document))
 	if err != nil {
