@@ -2,28 +2,24 @@ package d1
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"slices"
-	"strings"
 
-	"github.com/cloudflare/cloudflare-go/v6"
-	cfd1 "github.com/cloudflare/cloudflare-go/v6/d1"
-	"github.com/cloudflare/cloudflare-go/v6/option"
 	"github.com/indieinfra/scribble/config"
+	"github.com/indieinfra/scribble/internal/db"
+	"github.com/indieinfra/scribble/internal/db/schema"
 	"github.com/indieinfra/scribble/server/util"
 	"github.com/indieinfra/scribble/storage/content"
-	storageutil "github.com/indieinfra/scribble/storage/util"
 )
 
 type StoreImpl struct {
-	cfg           *config.D1ContentStrategy
-	contentUrl    string
-	pagination    *config.Pagination
-	client        *cloudflare.Client
-	contentTable  string
-	categoryTable string
+	cfg        *config.D1ContentStrategy
+	contentUrl string
+	pagination *config.Pagination
+	queries    *db.Queries
 }
 
 func NewD1ContentStore(cfg *config.Content) (*StoreImpl, error) {
@@ -31,87 +27,25 @@ func NewD1ContentStore(cfg *config.Content) (*StoreImpl, error) {
 		return nil, fmt.Errorf("d1 content config is nil")
 	}
 
-	store := &StoreImpl{
-		cfg:           cfg.D1,
-		contentUrl:    cfg.ContentUrl,
-		pagination:    &cfg.Pagination,
-		client:        buildD1Client(cfg.D1),
-		contentTable:  storageutil.DeriveTableName(cfg.D1.TablePrefix, "content"),
-		categoryTable: storageutil.DeriveTableName(cfg.D1.TablePrefix, "categories"),
+	d1cfg := cfg.D1
+
+	backend, err := sql.Open("d1", fmt.Sprintf("d1://%s:%s@%s", d1cfg.AccountID, d1cfg.APIToken, d1cfg.DatabaseID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to open d1 database connection: %w", err)
 	}
 
-	if err := store.initSchema(context.Background()); err != nil {
-		return nil, err
+	if _, err := backend.ExecContext(context.Background(), schema.Sqlite); err != nil {
+		return nil, fmt.Errorf("failed to ensure d1 database schema: %w", err)
 	}
 
-	return store, nil
-}
+	queries := db.New(backend)
 
-func buildD1Client(cfg *config.D1ContentStrategy) *cloudflare.Client {
-	opts := []option.RequestOption{option.WithAPIToken(strings.TrimSpace(cfg.APIToken))}
-
-	if base := strings.TrimSpace(cfg.Endpoint); base != "" {
-		opts = append(opts, option.WithBaseURL(strings.TrimSuffix(base, "/")))
-	}
-
-	return cloudflare.NewClient(opts...)
-}
-
-func (cs *StoreImpl) initSchema(ctx context.Context) error {
-	errMsg := "d1 initialization failed: %w"
-
-	for _, query := range cs.initQueries() {
-		if _, err := cs.executeQuery(ctx, query); err != nil {
-			return fmt.Errorf(errMsg, err)
-		}
-	}
-
-	return nil
-}
-
-func (cs *StoreImpl) initQueries() []string {
-	return []string{
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-						id INTEGER PRIMARY KEY, 
-						doc TEXT NOT NULL
-					)`, cs.contentTable),
-		fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS idx_doc_slug ON %s(json_extract(doc, '$.properties.slug[0]'))`, cs.contentTable),
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_doc_created ON %s(json_extract(doc, '$.properties.created_at[0]'))`, cs.contentTable),
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_doc_updated ON %s(json_extract(doc, '$.properties.updated_at[0]'))`, cs.contentTable),
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-						doc_id INTEGER NOT NULL, 
-						category TEXT NOT NULL,
-						PRIMARY KEY (doc_id, category),
-						FOREIGN KEY (doc_id) REFERENCES %s(id) ON DELETE CASCADE
-					) 
-					`, cs.categoryTable, cs.contentTable),
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_category_value ON %s(category)`, cs.categoryTable),
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS idx_category_cover ON %s(category, doc_id)`, cs.categoryTable),
-		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS trg_add_categories
-						AFTER INSERT ON %s
-						BEGIN
-							INSERT INTO %s (doc_id, category) SELECT NEW.id, json_each.value FROM json_each(NEW.doc, '$.properties.category');
-						END`, cs.contentTable, cs.categoryTable),
-		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS trg_update_categories
-						AFTER UPDATE OF doc ON %s
-						WHEN json_extract(OLD.doc, '$.properties.category') IS NOT json_extract(NEW.doc, '$.properties.category')
-						BEGIN
-							DELETE FROM %s WHERE doc_id = OLD.id;
-							INSERT INTO %s (doc_id, category) SELECT NEW.id, json_each.value FROM json_each(NEW.doc, '$.properties.category');
-						END`, cs.contentTable, cs.categoryTable, cs.categoryTable),
-	}
-}
-
-func (cs *StoreImpl) insertQuery() string {
-	return fmt.Sprintf("INSERT INTO %s (doc) VALUES (?)", cs.contentTable)
-}
-
-func (cs *StoreImpl) updateQuery() string {
-	return fmt.Sprintf("UPDATE %s SET doc = ? WHERE json_extract(doc, '$.properties.slug') = json_array(?)", cs.contentTable)
-}
-
-func (cs *StoreImpl) selectQuery() string {
-	return fmt.Sprintf("SELECT doc FROM %s WHERE json_extract(doc, '$.properties.slug') = json_array(?) LIMIT 1", cs.contentTable)
+	return &StoreImpl{
+		cfg:        cfg.D1,
+		contentUrl: cfg.ContentUrl,
+		pagination: &cfg.Pagination,
+		queries:    queries,
+	}, nil
 }
 
 func (cs *StoreImpl) normalizePagination(page int, limit int) (int, int, int) {
@@ -131,44 +65,13 @@ func (cs *StoreImpl) normalizePagination(page int, limit int) (int, int, int) {
 	return page, limit, offset
 }
 
-func (cs *StoreImpl) selectMultipleQuery(page int, limit int) string {
-	page, limit, offset := cs.normalizePagination(page, limit)
-
-	query := "SELECT doc FROM " + cs.contentTable + " ORDER BY json_extract(doc, '$.properties.created_at') DESC"
-	if cs.pagination.Enabled {
-		query = fmt.Sprintf("%s LIMIT %d OFFSET %d", query, limit, offset)
-	}
-
-	return query
-}
-
-func (cs *StoreImpl) selectCategoriesQuery(page int, limit int, withFilter bool) string {
-	page, limit, offset := cs.normalizePagination(page, limit)
-
-	query := fmt.Sprintf("SELECT DISTINCT category FROM %s", cs.categoryTable)
-
-	if withFilter {
-		query = fmt.Sprintf("%s WHERE category LIKE ? || '%%'", query)
-	}
-
-	if cs.pagination.Enabled {
-		query = fmt.Sprintf("%s LIMIT %d OFFSET %d", query, limit, offset)
-	}
-
-	return query
-}
-
-func (cs *StoreImpl) existsQuery() string {
-	return fmt.Sprintf("SELECT 1 FROM %s WHERE json_extract(doc, '$.properties.slug') = json_array(?) LIMIT 1", cs.contentTable)
-}
-
 func (cs *StoreImpl) Create(ctx context.Context, doc util.Mf2Document) (bool, error) {
 	payload, err := json.Marshal(doc)
 	if err != nil {
 		return false, err
 	}
 
-	if _, err := cs.executeQuery(ctx, cs.insertQuery(), string(payload)); err != nil {
+	if err := cs.queries.InsertDocument(ctx, string(payload)); err != nil {
 		return false, err
 	}
 
@@ -199,20 +102,20 @@ func (cs *StoreImpl) Update(ctx context.Context, url string, replacements map[st
 	}
 
 	if newSlug != oldSlug {
-		if _, err := cs.executeQuery(ctx, cs.insertQuery(), string(payload)); err != nil {
+		if err := cs.queries.InsertDocument(ctx, string(payload)); err != nil {
 			return nil, fmt.Errorf("failed to insert new row for slug change: %w", err)
 		}
 
-		deleteQuery := fmt.Sprintf("DELETE FROM %s WHERE json_extract(doc, '$.properties.slug') = json_array(?)", cs.contentTable)
-		if _, err := cs.executeQuery(ctx, deleteQuery, oldSlug); err != nil {
-			if _, rbErr := cs.executeQuery(ctx, deleteQuery, newSlug); rbErr != nil {
+		if err := cs.queries.DeleteDocumentBySlug(ctx, oldSlug); err != nil {
+			if rbErr := cs.queries.DeleteDocumentBySlug(ctx, newSlug); rbErr != nil {
 				return nil, fmt.Errorf("failed to delete old row and rollback failed (system inconsistent): delete_error=%w, rollback_error=%v", err, rbErr)
 			}
-			return nil, fmt.Errorf("failed to delete old row (rolled back successfully): %w", err)
+
+			return nil, fmt.Errorf("failed to delete old row after slug change: %w", err)
 		}
 	} else {
-		if _, err := cs.executeQuery(ctx, cs.updateQuery(), string(payload), newSlug); err != nil {
-			return nil, err
+		if err := cs.queries.UpdateDocumentBySlug(ctx, db.UpdateDocumentBySlugParams{Doc: string(payload), JsonArray: newSlug}); err != nil {
+			return nil, fmt.Errorf("failed to update document: %w", err)
 		}
 	}
 
@@ -239,7 +142,8 @@ func (cs *StoreImpl) Get(ctx context.Context, url string) (*util.Mf2Document, er
 }
 
 func (cs *StoreImpl) List(ctx context.Context, page int, limit int) ([]util.Mf2Document, error) {
-	rows, err := cs.executeQuery(ctx, cs.selectMultipleQuery(page, limit))
+	_, limit, offset := cs.normalizePagination(page, limit)
+	rows, err := cs.queries.ListDocuments(ctx, db.ListDocumentsParams{Limit: int64(limit), Offset: int64(offset)})
 	if err != nil {
 		return nil, err
 	}
@@ -250,14 +154,8 @@ func (cs *StoreImpl) List(ctx context.Context, page int, limit int) ([]util.Mf2D
 
 	docs := make([]util.Mf2Document, 0, len(rows))
 	for _, row := range rows {
-		raw, ok := row["doc"].(string)
-		if !ok || raw == "" {
-			log.Println("warning: no document found in row")
-			continue
-		}
-
 		var doc util.Mf2Document
-		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		if err := json.Unmarshal([]byte(row), &doc); err != nil {
 			log.Println("warning: failed to unmarshal document json:", err)
 			continue
 		}
@@ -269,13 +167,15 @@ func (cs *StoreImpl) List(ctx context.Context, page int, limit int) ([]util.Mf2D
 }
 
 func (cs *StoreImpl) ListCategories(ctx context.Context, page int, limit int, filter string) ([]string, error) {
-	var rows []map[string]any
+	var rows []string
 	var err error
 
+	_, limit, offset := cs.normalizePagination(page, limit)
+
 	if filter != "" {
-		rows, err = cs.executeQuery(ctx, cs.selectCategoriesQuery(page, limit, true), filter)
+		rows, err = cs.queries.ListCategoriesLike(ctx, db.ListCategoriesLikeParams{Category: filter, Limit: int64(limit), Offset: int64(offset)})
 	} else {
-		rows, err = cs.executeQuery(ctx, cs.selectCategoriesQuery(page, limit, false))
+		rows, err = cs.queries.ListCategories(ctx, db.ListCategoriesParams{Limit: int64(limit), Offset: int64(offset)})
 	}
 
 	if err != nil {
@@ -285,12 +185,7 @@ func (cs *StoreImpl) ListCategories(ctx context.Context, page int, limit int, fi
 	}
 
 	categories := make([]string, 0, len(rows))
-	for _, row := range rows {
-		cat, ok := row["category"].(string)
-		if !ok {
-			continue
-		}
-
+	for _, cat := range rows {
 		if !slices.Contains(categories, cat) {
 			categories = append(categories, cat)
 		}
@@ -300,22 +195,17 @@ func (cs *StoreImpl) ListCategories(ctx context.Context, page int, limit int, fi
 }
 
 func (cs *StoreImpl) getDocBySlug(ctx context.Context, slug string) (*util.Mf2Document, error) {
-	rows, err := cs.executeQuery(ctx, cs.selectQuery(), slug)
+	document, err := cs.queries.GetDocumentBySlug(ctx, slug)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(rows) == 0 {
+	if document == "" {
 		return nil, content.ErrNotFound
 	}
 
-	raw, ok := rows[0]["doc"].(string)
-	if !ok || raw == "" {
-		return nil, fmt.Errorf("doc column missing or not a string")
-	}
-
 	var doc util.Mf2Document
-	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+	if err := json.Unmarshal([]byte(document), &doc); err != nil {
 		return nil, err
 	}
 
@@ -323,67 +213,10 @@ func (cs *StoreImpl) getDocBySlug(ctx context.Context, slug string) (*util.Mf2Do
 }
 
 func (cs *StoreImpl) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
-	rows, err := cs.executeQuery(ctx, cs.existsQuery(), slug)
+	exists, err := cs.queries.DocExistsBySlug(ctx, slug)
 	if err != nil {
 		return false, err
 	}
 
-	return len(rows) > 0, nil
-}
-
-func (cs *StoreImpl) executeQuery(ctx context.Context, sql string, params ...any) ([]map[string]any, error) {
-	body := cfd1.DatabaseQueryParamsBodyD1SingleQuery{Sql: cloudflare.F(sql)}
-	if len(params) > 0 {
-		body.Params = cloudflare.F(convertParams(params))
-	}
-
-	resp, err := cs.client.D1.Database.Query(ctx, cs.cfg.DatabaseID, cfd1.DatabaseQueryParams{
-		AccountID: cloudflare.F(strings.TrimSpace(cs.cfg.AccountID)),
-		Body:      body,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if resp == nil || len(resp.Result) == 0 {
-		return nil, nil
-	}
-
-	result := resp.Result[0]
-	if !result.Success {
-		return nil, fmt.Errorf("d1 query execution failed")
-	}
-
-	rows := make([]map[string]any, 0, len(result.Results))
-	for _, r := range result.Results {
-		m, ok := r.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("unexpected row type %T", r)
-		}
-		rows = append(rows, m)
-	}
-
-	return rows, nil
-}
-
-func convertParams(params []any) []string {
-	if len(params) == 0 {
-		return nil
-	}
-
-	out := make([]string, 0, len(params))
-	for _, p := range params {
-		switch v := p.(type) {
-		case bool:
-			if v {
-				out = append(out, "1")
-			} else {
-				out = append(out, "0")
-			}
-		default:
-			out = append(out, fmt.Sprint(p))
-		}
-	}
-
-	return out
+	return exists != 0, nil
 }
