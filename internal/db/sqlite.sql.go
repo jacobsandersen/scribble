@@ -10,24 +10,24 @@ import (
 )
 
 const deleteDocumentBySlug = `-- name: DeleteDocumentBySlug :exec
-DELETE FROM scribble_content WHERE json_extract(doc, '$.properties.slug') = json_array(?)
+DELETE FROM scribble_content WHERE json_extract(doc, '$.properties.slug') = json_array(cast(?1 as text))
 `
 
-func (q *Queries) DeleteDocumentBySlug(ctx context.Context, jsonArray interface{}) error {
-	_, err := q.db.ExecContext(ctx, deleteDocumentBySlug, jsonArray)
+func (q *Queries) DeleteDocumentBySlug(ctx context.Context, slug string) error {
+	_, err := q.db.ExecContext(ctx, deleteDocumentBySlug, slug)
 	return err
 }
 
 const docExistsBySlug = `-- name: DocExistsBySlug :one
 SELECT EXISTS (
     SELECT 1 FROM scribble_content 
-        WHERE json_extract(doc, '$.properties.slug') = json_array(?) 
+        WHERE json_extract(doc, '$.properties.slug') = json_array(cast(?1 as text)) 
         LIMIT 1
 )
 `
 
-func (q *Queries) DocExistsBySlug(ctx context.Context, jsonArray interface{}) (int64, error) {
-	row := q.db.QueryRowContext(ctx, docExistsBySlug, jsonArray)
+func (q *Queries) DocExistsBySlug(ctx context.Context, slug string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, docExistsBySlug, slug)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -35,12 +35,12 @@ func (q *Queries) DocExistsBySlug(ctx context.Context, jsonArray interface{}) (i
 
 const getDocumentBySlug = `-- name: GetDocumentBySlug :one
 SELECT doc FROM scribble_content 
-    WHERE json_extract(doc, '$.properties.slug') = json_array(?) 
+    WHERE json_extract(doc, '$.properties.slug') = json_array(cast(?1 as text)) 
     LIMIT 1
 `
 
-func (q *Queries) GetDocumentBySlug(ctx context.Context, jsonArray interface{}) (string, error) {
-	row := q.db.QueryRowContext(ctx, getDocumentBySlug, jsonArray)
+func (q *Queries) GetDocumentBySlug(ctx context.Context, slug string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getDocumentBySlug, slug)
 	var doc string
 	err := row.Scan(&doc)
 	return doc, err
@@ -199,15 +199,15 @@ func (q *Queries) ListDocumentsByCategory(ctx context.Context, arg ListDocuments
 const updateDocumentBySlug = `-- name: UpdateDocumentBySlug :exec
 UPDATE scribble_content 
     SET doc = ? 
-    WHERE json_extract(doc, '$.properties.slug') = json_array(?)
+    WHERE json_extract(doc, '$.properties.slug') = json_array(cast(? as text))
 `
 
 type UpdateDocumentBySlugParams struct {
-	Doc       string
-	JsonArray interface{}
+	Doc  string
+	Slug string
 }
 
 func (q *Queries) UpdateDocumentBySlug(ctx context.Context, arg UpdateDocumentBySlugParams) error {
-	_, err := q.db.ExecContext(ctx, updateDocumentBySlug, arg.Doc, arg.JsonArray)
+	_, err := q.db.ExecContext(ctx, updateDocumentBySlug, arg.Doc, arg.Slug)
 	return err
 }

@@ -1,6 +1,6 @@
 -- name: GetDocumentBySlug :one
 SELECT doc FROM scribble_content 
-    WHERE json_extract(doc, '$.properties.slug') = json_array(?) 
+    WHERE json_extract(doc, '$.properties.slug') = json_array(cast(@slug as text)) 
     LIMIT 1;
 
 -- name: ListDocuments :many
@@ -29,18 +29,18 @@ SELECT DISTINCT category FROM scribble_categories
 -- name: DocExistsBySlug :one
 SELECT EXISTS (
     SELECT 1 FROM scribble_content 
-        WHERE json_extract(doc, '$.properties.slug') = json_array(?) 
+        WHERE json_extract(doc, '$.properties.slug') = json_array(cast(@slug as text)) 
         LIMIT 1
 );
 
 -- name: UpdateDocumentBySlug :exec
 UPDATE scribble_content 
     SET doc = ? 
-    WHERE json_extract(doc, '$.properties.slug') = json_array(?);
+    WHERE json_extract(doc, '$.properties.slug') = json_array(cast(@slug as text));
 
 -- name: InsertDocument :exec
 INSERT INTO scribble_content (doc) VALUES (?);
 
 -- name: DeleteDocumentBySlug :exec
-DELETE FROM scribble_content WHERE json_extract(doc, '$.properties.slug') = json_array(?)
+DELETE FROM scribble_content WHERE json_extract(doc, '$.properties.slug') = json_array(cast(@slug as text));
 

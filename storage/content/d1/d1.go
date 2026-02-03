@@ -8,6 +8,8 @@ import (
 	"log"
 	"slices"
 
+	_ "github.com/synehq/d1_go_sql"
+
 	"github.com/indieinfra/scribble/config"
 	"github.com/indieinfra/scribble/internal/db"
 	"github.com/indieinfra/scribble/internal/db/schema"
@@ -114,7 +116,7 @@ func (cs *StoreImpl) Update(ctx context.Context, url string, replacements map[st
 			return nil, fmt.Errorf("failed to delete old row after slug change: %w", err)
 		}
 	} else {
-		if err := cs.queries.UpdateDocumentBySlug(ctx, db.UpdateDocumentBySlugParams{Doc: string(payload), JsonArray: newSlug}); err != nil {
+		if err := cs.queries.UpdateDocumentBySlug(ctx, db.UpdateDocumentBySlugParams{Doc: string(payload), Slug: newSlug}); err != nil {
 			return nil, fmt.Errorf("failed to update document: %w", err)
 		}
 	}
