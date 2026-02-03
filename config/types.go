@@ -1,7 +1,7 @@
 package config
 
 type Config struct {
-	Debug    bool     `mapstructure:"debug" validate:"required,boolean"`
+	Debug    bool     `mapstructure:"debug" validate:"boolean"`
 	Server   Server   `mapstructure:"server"`
 	Micropub Micropub `mapstructure:"micropub"`
 	Content  Content  `mapstructure:"content"`
