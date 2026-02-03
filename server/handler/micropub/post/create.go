@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/server/auth"
 	"github.com/indieinfra/scribble/server/body"
-	"github.com/indieinfra/scribble/server/handler/common"
+	"github.com/indieinfra/scribble/server/handler/micropub/common"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/server/util"

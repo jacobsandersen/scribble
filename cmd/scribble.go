@@ -14,6 +14,10 @@ func main() {
 
 	log.Println("loading configuration...")
 	configFile := os.Getenv("CONFIG_FILE")
+	if configFile == "" {
+		configFile = "config.yml"
+	}
+
 	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
 		log.Fatalf("failed to load configuration: %v", err)

@@ -1,7 +1,7 @@
 package config
 
 type Config struct {
-	Debug    bool     `mapstructure:"debug"`
+	Debug    bool     `mapstructure:"debug" validate:"required,boolean"`
 	Server   Server   `mapstructure:"server"`
 	Micropub Micropub `mapstructure:"micropub"`
 	Content  Content  `mapstructure:"content"`
@@ -9,10 +9,24 @@ type Config struct {
 }
 
 type Server struct {
-	Address   string       `mapstructure:"address" validate:"required,hostname|ip"`
-	Port      int          `mapstructure:"port" validate:"required,min=1,max=65535"`
-	PublicUrl string       `mapstructure:"public_url" validate:"required,url"`
-	Limits    ServerLimits `mapstructure:"limits"`
+	Micropub    MicropubServer `mapstructure:"micropub"`
+	QueryServer QueryServer    `mapstructure:"query_server"`
+}
+
+type MicropubServer struct {
+	PublicUrl string        `mapstructure:"public_url" validate:"required,url"`
+	Server    ServerBinding `mapstructure:"server"`
+	Limits    ServerLimits  `mapstructure:"limits"`
+}
+
+type QueryServer struct {
+	Enabled bool          `mapstructure:"enabled" validate:"boolean"`
+	Server  ServerBinding `mapstructure:"server" validate:"required"`
+}
+
+type ServerBinding struct {
+	Address string `mapstructure:"address" validate:"required,hostname|ip"`
+	Port    int    `mapstructure:"port" validate:"required,min=1,max=65535"`
 }
 
 type ServerLimits struct {

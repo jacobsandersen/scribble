@@ -124,7 +124,7 @@ func ReadBody(cfg *config.Config, w http.ResponseWriter, r *http.Request) (*Pars
 func readJSON(cfg *config.Config, w http.ResponseWriter, r *http.Request) map[string]any {
 	out := make(map[string]any)
 
-	r.Body = http.MaxBytesReader(w, r.Body, int64(cfg.Server.Limits.MaxPayloadSize))
+	r.Body = http.MaxBytesReader(w, r.Body, int64(cfg.Server.Micropub.Limits.MaxPayloadSize))
 	if err := json.NewDecoder(r.Body).Decode(&out); err != nil {
 		resp.WriteInvalidRequest(w, "Invalid JSON body")
 		return nil
@@ -137,7 +137,7 @@ func readJSON(cfg *config.Config, w http.ResponseWriter, r *http.Request) map[st
 func readFormURLEncoded(cfg *config.Config, w http.ResponseWriter, r *http.Request) map[string]any {
 	out := make(map[string]any)
 
-	r.Body = http.MaxBytesReader(w, r.Body, int64(cfg.Server.Limits.MaxPayloadSize))
+	r.Body = http.MaxBytesReader(w, r.Body, int64(cfg.Server.Micropub.Limits.MaxPayloadSize))
 	if err := r.ParseForm(); err != nil {
 		resp.WriteInvalidRequest(w, fmt.Sprintf("Invalid form body: %v", err))
 		return nil
@@ -164,8 +164,8 @@ func readFormURLEncoded(cfg *config.Config, w http.ResponseWriter, r *http.Reque
 // readMultipart parses a multipart/form-data request body, extracting both
 // form fields and uploaded files.
 func readMultipart(cfg *config.Config, w http.ResponseWriter, r *http.Request) (*ParsedBody, bool) {
-	maxMemory := int64(cfg.Server.Limits.MaxMultipartMem)
-	maxFileSize := int64(cfg.Server.Limits.MaxFileSize)
+	maxMemory := int64(cfg.Server.Micropub.Limits.MaxMultipartMem)
+	maxFileSize := int64(cfg.Server.Micropub.Limits.MaxFileSize)
 
 	parsed, err := util.ParseMultipart(w, r, maxMemory, maxFileSize)
 	if err != nil {

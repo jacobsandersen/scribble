@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/indieinfra/scribble/server/body"
-	"github.com/indieinfra/scribble/server/handler/common"
+	"github.com/indieinfra/scribble/server/handler/micropub/common"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 )

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/indieinfra/scribble/server/auth"
-	"github.com/indieinfra/scribble/server/handler/common"
+	"github.com/indieinfra/scribble/server/handler/micropub/common"
 	"github.com/indieinfra/scribble/server/middleware"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
@@ -19,8 +19,9 @@ func HandleMediaUpload(st *state.ScribbleState) http.HandlerFunc {
 			return
 		}
 
-		maxMemory := int64(st.Cfg.Server.Limits.MaxMultipartMem)
-		maxSize := int64(st.Cfg.Server.Limits.MaxFileSize)
+		limits := st.Cfg.Server.Micropub.Limits
+		maxMemory := int64(limits.MaxMultipartMem)
+		maxSize := int64(limits.MaxFileSize)
 		parsed, err := util.ParseMultipart(w, r, maxMemory, maxSize)
 		if err != nil {
 			common.LogAndWriteError(w, r, "parse multipart", err)
