@@ -1,0 +1,46 @@
+-- name: GetDocumentBySlug :one
+SELECT doc FROM scribble_content 
+    WHERE json_extract(doc, '$.properties.slug') = json_array(cast(@slug as text)) 
+    LIMIT 1;
+
+-- name: ListDocuments :many
+SELECT doc FROM scribble_content 
+    ORDER BY json_extract(doc, '$.properties.created_at') DESC 
+    LIMIT ? OFFSET ?;
+
+-- name: ListDocumentsByCategory :many
+SELECT sc.doc FROM scribble_content sc
+    JOIN scribble_categories c ON sc.id = c.doc_id
+    WHERE c.category = ?
+    ORDER BY json_extract(sc.doc, '$.properties.created_at') DESC 
+    LIMIT ? OFFSET ?;
+
+-- name: ListCategories :many
+SELECT DISTINCT category FROM scribble_categories 
+    ORDER BY category ASC 
+    LIMIT ? OFFSET ?;
+
+-- name: ListCategoriesLike :many
+SELECT DISTINCT category FROM scribble_categories 
+    WHERE category LIKE ?
+    ORDER BY category ASC 
+    LIMIT ? OFFSET ?;
+
+-- name: DocExistsBySlug :one
+SELECT EXISTS (
+    SELECT 1 FROM scribble_content 
+        WHERE json_extract(doc, '$.properties.slug') = json_array(cast(@slug as text)) 
+        LIMIT 1
+);
+
+-- name: UpdateDocumentBySlug :exec
+UPDATE scribble_content 
+    SET doc = ? 
+    WHERE json_extract(doc, '$.properties.slug') = json_array(cast(@slug as text));
+
+-- name: InsertDocument :exec
+INSERT INTO scribble_content (doc) VALUES (?);
+
+-- name: DeleteDocumentBySlug :exec
+DELETE FROM scribble_content WHERE json_extract(doc, '$.properties.slug') = json_array(cast(@slug as text));
+
