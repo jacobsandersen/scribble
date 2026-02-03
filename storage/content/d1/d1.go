@@ -8,6 +8,7 @@ import (
 	"log"
 	"slices"
 
+	// Import the D1 driver - its init function registers the driver with database/sql
 	_ "github.com/synehq/d1_go_sql"
 
 	"github.com/indieinfra/scribble/config"
