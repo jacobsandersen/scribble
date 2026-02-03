@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*.*.*' ]
   pull_request:
     branches: [ main ]
 
@@ -23,6 +24,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+        
+      - name: Install SQLC
+        run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+      
+      - name: Generate code with SQLC
+        run: sqlc generate
 
       - name: Build Scribble
         run: go build -v ./cmd/scribble.go

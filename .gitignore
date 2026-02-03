@@ -4,3 +4,4 @@ config.yml
 coverage.out
 coverage.txt
 devdb
+internal/db/*.go
