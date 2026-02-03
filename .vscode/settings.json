@@ -1,5 +1,9 @@
 {
   "gopls": {
     "buildFlags": ["-tags=testcontainers"]
+  },
+  "sonarlint.connectedMode.project": {
+    "connectionId": "jacobsandersen",
+    "projectKey": "jacobsandersen_scribble"
   }
 }

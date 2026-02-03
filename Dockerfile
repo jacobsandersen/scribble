@@ -1,7 +1,11 @@
 FROM golang:1.25-alpine AS builder
 WORKDIR /app
+RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 COPY go.mod go.sum ./
 RUN go mod download
+COPY sqlc.yml ./
+COPY internal/db/ ./internal/db
+RUN sqlc generate
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o main cmd/scribble.go
 
