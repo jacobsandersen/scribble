@@ -14,12 +14,14 @@ func HandleList(st *state.ScribbleState) http.HandlerFunc {
 		params := body.ReadQueryParams(r)
 
 		filter := content.QueryDocumentsFilter{
-			Slug:           body.GetFirstOrNil(&params, "slug"),
-			Category:       body.GetFirstOrNil(&params, "category"),
-			CreatedYear:    body.GetIntOrNil[int64](&params, "year"),
-			CreatedMonth:   body.GetIntOrNil[int64](&params, "month"),
-			CreatedDay:     body.GetIntOrNil[int64](&params, "day"),
-			CreatedWeekday: body.GetIntOrNil[int64](&params, "weekday"),
+			Slug:             body.GetFirstOrNil(&params, "slug"),
+			Category:         body.GetFirstOrNil(&params, "category"),
+			CreatedYear:      body.GetIntOrNil[int64](&params, "year"),
+			CreatedMonth:     body.GetIntOrNil[int64](&params, "month"),
+			CreatedDay:       body.GetIntOrNil[int64](&params, "day"),
+			CreatedWeekday:   body.GetIntOrNil[int64](&params, "weekday"),
+			CreatedWeek:      body.GetIntOrNil[int64](&params, "week"),
+			CreatedDayOfYear: body.GetIntOrNil[int64](&params, "day_of_year"),
 		}
 
 		page := body.GetIntOrDefault(&params, "page", 1)

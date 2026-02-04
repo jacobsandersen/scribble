@@ -39,6 +39,14 @@ SELECT c.doc FROM scribble_content c
             CAST(? AS INTEGER) = 0
             OR c.created_weekday = ?
         )
+        AND (
+            CAST(? AS INTEGER) = 0
+            OR c.created_week = ?
+        )
+        AND (
+            CAST(? AS INTEGER) = 0
+            OR c.created_day_of_year = ?
+        )
         AND c.visible = 1
     ORDER BY c.created_at DESC
     LIMIT ? OFFSET ?;
