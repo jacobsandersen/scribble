@@ -2,11 +2,13 @@ package content
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"maps"
 	"reflect"
 
 	"github.com/google/uuid"
+	"github.com/indieinfra/scribble/internal/db"
 	"github.com/indieinfra/scribble/server/util"
 )
 
@@ -95,4 +97,80 @@ func EnsureUniqueSlug(ctx context.Context, store Store, slug string) (string, er
 	}
 
 	return fmt.Sprintf("%s-%s", slug, uuid.New().String()), nil
+}
+
+func StringToNullString(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: s, Valid: true}
+}
+
+func NormalizePagination(perPage, page, limit int) (int, int, int) {
+	if page < 1 {
+		page = 1
+	}
+
+	if limit <= 0 || limit > perPage {
+		limit = perPage
+	}
+
+	offset := 0
+	if page > 1 {
+		offset = (page - 1) * limit
+	}
+
+	return page, limit, offset
+}
+
+func QueryDocumentsParamsFromFilter(limit, offset int, filter QueryDocumentsFilter) db.QueryDocumentsParams {
+	var (
+		createdYear    sql.NullInt64
+		createdMonth   sql.NullInt64
+		createdDay     sql.NullInt64
+		createdWeekday sql.NullInt64
+		category       string
+
+		applyCategory       int64
+		applyCreatedYear    int64
+		applyCreatedMonth   int64
+		applyCreatedDay     int64
+		applyCreatedWeekday int64
+	)
+
+	if filter.Category != nil {
+		applyCategory = 1
+		category = *filter.Category
+	}
+	if filter.CreatedYear != nil {
+		applyCreatedYear = 1
+		createdYear = sql.NullInt64{Int64: *filter.CreatedYear, Valid: true}
+	}
+	if filter.CreatedMonth != nil {
+		applyCreatedMonth = 1
+		createdMonth = sql.NullInt64{Int64: *filter.CreatedMonth, Valid: true}
+	}
+	if filter.CreatedDay != nil {
+		applyCreatedDay = 1
+		createdDay = sql.NullInt64{Int64: *filter.CreatedDay, Valid: true}
+	}
+	if filter.CreatedWeekday != nil {
+		applyCreatedWeekday = 1
+		createdWeekday = sql.NullInt64{Int64: *filter.CreatedWeekday, Valid: true}
+	}
+
+	return db.QueryDocumentsParams{
+		ApplyCategory:       applyCategory,
+		Category:            category,
+		ApplyCreatedYear:    applyCreatedYear,
+		CreatedYear:         createdYear,
+		ApplyCreatedMonth:   applyCreatedMonth,
+		CreatedMonth:        createdMonth,
+		ApplyCreatedDay:     applyCreatedDay,
+		CreatedDay:          createdDay,
+		ApplyCreatedWeekday: applyCreatedWeekday,
+		CreatedWeekday:      createdWeekday,
+		Offset:              int64(offset),
+		Limit:               int64(limit),
+	}
 }

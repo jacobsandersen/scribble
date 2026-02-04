@@ -6,6 +6,14 @@ import (
 	"github.com/indieinfra/scribble/server/util"
 )
 
+type QueryDocumentsFilter struct {
+	Category       *string
+	CreatedYear    *int64
+	CreatedMonth   *int64
+	CreatedDay     *int64
+	CreatedWeekday *int64
+}
+
 type Store interface {
 	Create(ctx context.Context, doc util.Mf2Document) (immediate bool, err error)
 
@@ -18,6 +26,8 @@ type Store interface {
 	Get(ctx context.Context, url string) (doc *util.Mf2Document, err error)
 
 	List(ctx context.Context, page int, limit int) (results []util.Mf2Document, err error)
+
+	Query(ctx context.Context, page int, limit int, filter QueryDocumentsFilter) (results []util.Mf2Document, err error)
 
 	ListCategories(ctx context.Context, page int, limit int, filter string) (results []string, err error)
 

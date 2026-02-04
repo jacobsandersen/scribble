@@ -1,7 +1,9 @@
 package config
 
+import "fmt"
+
 type Config struct {
-	Debug    bool     `mapstructure:"debug"`
+	Debug    bool     `mapstructure:"debug" validate:"boolean"`
 	Server   Server   `mapstructure:"server"`
 	Micropub Micropub `mapstructure:"micropub"`
 	Content  Content  `mapstructure:"content"`
@@ -9,10 +11,18 @@ type Config struct {
 }
 
 type Server struct {
-	Address   string       `mapstructure:"address" validate:"required,hostname|ip"`
-	Port      int          `mapstructure:"port" validate:"required,min=1,max=65535"`
 	PublicUrl string       `mapstructure:"public_url" validate:"required,url"`
+	Binding   Binding      `mapstructure:"binding"`
 	Limits    ServerLimits `mapstructure:"limits"`
+}
+
+type Binding struct {
+	Address string `mapstructure:"address" validate:"required,hostname|ip"`
+	Port    int    `mapstructure:"port" validate:"required,min=1,max=65535"`
+}
+
+func (b *Binding) AddressPort() string {
+	return fmt.Sprintf("%v:%v", b.Address, b.Port)
 }
 
 type ServerLimits struct {

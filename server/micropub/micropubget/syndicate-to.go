@@ -1,4 +1,4 @@
-package get
+package micropubget
 
 import (
 	"net/http"

@@ -3,27 +3,46 @@
 debug: true
 
 server:
-  # What address to bind to?
-  address: "0.0.0.0"
+  # Main Micropub server configuration
+  micropub:
+    # The externally available URL for Scribble
+    # This is used for self-references, especially in the config endpoint
+    public_url: "https://scribble.example.org"
 
-  # What port to bind to?
-  port: 9000
+    # Server binding configuration
+    server:
+      # What address to bind to?
+      address: "0.0.0.0"
 
-  # The externally available URL for Scribble
-  # This is used for self-references, especially in the config endpoint
-  public_url: "https://scribble.example.org"
+      # What port to bind to?
+      port: 9000
 
-  # Request payload limits
-  limits:
-    # How big can a normal request be at maximum? 2MB by default. You may wish to lower this.
-    # This will apply to JSON and form encoded bodies, but does not apply to multipart (file upload) requests.
-    max_payload_size: 2_000_000
+    # Request payload limits
+    limits:
+      # How big can a normal request be at maximum? 2MB by default. You may wish to lower this.
+      # This will apply to JSON and form encoded bodies, but does not apply to multipart (file upload) requests.
+      max_payload_size: 2_000_000
 
-    # How big can a file upload be at maximum? 10MB by default. You may wish to adjust this.
-    max_file_size: 10_000_000
+      # How big can a file upload be at maximum? 10MB by default. You may wish to adjust this.
+      max_file_size: 10_000_000
 
-    # Required: memory cap used when parsing multipart requests (file uploads). Must be large enough to hold all parts' headers and non-file fields.
-    max_multipart_mem: 20_000_000
+      # Required: memory cap used when parsing multipart requests (file uploads). Must be large enough to hold all parts' headers and non-file fields.
+      max_multipart_mem: 20_000_000
+
+  # Query server configuration
+  query_server:
+    # Whether to enable the query server. This is an optional server that permits reading data
+    # outside of of the main Micropub endpoints, for use in static site generation or other
+    # read-only scenarios.
+    enabled: false
+
+    # Server binding configuration
+    server:
+      # What address to bind to?
+      address: "0.0.0.0"
+
+      # What port to bind to? Must not be the same as the main server port.
+      port: 9001
 
 # Micropub configuration
 micropub:

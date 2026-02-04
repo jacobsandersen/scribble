@@ -1,4 +1,4 @@
-package post
+package micropubpost
 
 import (
 	"fmt"
@@ -8,15 +8,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indieinfra/scribble/server/auth"
-	"github.com/indieinfra/scribble/server/body"
-	"github.com/indieinfra/scribble/server/handler/common"
+	"github.com/indieinfra/scribble/server/micropub/micropubcommon"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/server/util"
 	"github.com/indieinfra/scribble/storage/content"
 )
 
-func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb *body.ParsedBody) {
+func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb *micropubcommon.ParsedBody) {
 	if !requireScope(w, r, auth.ScopeCreate) {
 		return
 	}
@@ -37,13 +36,13 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 		objectUrl := st.MediaPathPattern.GenerateMedia(time.Now(), pf.FileExtension)
 		objectKey, err := util.GetUrlPath(objectUrl)
 		if err != nil {
-			common.LogAndWriteError(w, r, "derive s3 object key", err)
+			micropubcommon.LogAndWriteError(w, r, "derive s3 object key", err)
 			return
 		}
 
 		err = st.MediaStore.Upload(r.Context(), pf, strings.TrimPrefix(objectUrl, objectKey))
 		if err != nil {
-			common.LogAndWriteError(w, r, "upload media", err)
+			micropubcommon.LogAndWriteError(w, r, "upload media", err)
 			return
 		}
 
@@ -57,7 +56,7 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 
 	slug, err := content.EnsureUniqueSlug(r.Context(), st.ContentStore, deriveSuggestedSlug(&document))
 	if err != nil {
-		common.LogAndWriteError(w, r, "slug creation", err)
+		micropubcommon.LogAndWriteError(w, r, "slug creation", err)
 		return
 	}
 
@@ -73,13 +72,13 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 
 	immediate, err := st.ContentStore.Create(r.Context(), document)
 	if err != nil {
-		common.LogAndWriteError(w, r, "create content", err)
+		micropubcommon.LogAndWriteError(w, r, "create content", err)
 		return
 	}
 
 	url, err := st.ContentPathPattern.GenerateContent(timeNow, slug)
 	if err != nil {
-		common.LogAndWriteError(w, r, "generate content URL", err)
+		micropubcommon.LogAndWriteError(w, r, "generate content URL", err)
 		return
 	}
 

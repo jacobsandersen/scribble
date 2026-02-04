@@ -12,10 +12,11 @@ import (
 	"time"
 
 	"github.com/indieinfra/scribble/config"
-	"github.com/indieinfra/scribble/server/handler/get"
-	"github.com/indieinfra/scribble/server/handler/post"
-	"github.com/indieinfra/scribble/server/handler/upload"
+	"github.com/indieinfra/scribble/server/micropub/micropubget"
+	"github.com/indieinfra/scribble/server/micropub/micropubpost"
+	"github.com/indieinfra/scribble/server/micropub/micropubupload"
 	"github.com/indieinfra/scribble/server/middleware"
+	"github.com/indieinfra/scribble/server/query"
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/storage/content/factory"
 	mediafactory "github.com/indieinfra/scribble/storage/media/factory"
@@ -29,18 +30,36 @@ func StartServer(cfg *config.Config) error {
 		return fmt.Errorf("initialization failed: %w", err)
 	}
 
-	log.Println("configuring routes...")
+	server, errChan := runServer(st)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case sig := <-sigChan:
+		log.Printf("received signal %v, shutting down...", sig)
+		shutdownServerGracefully(server)
+		return nil
+	case err := <-errChan:
+		log.Printf("server error: %v, shutting down...", err)
+		shutdownServerGracefully(server)
+		return err
+	}
+}
+
+func runServer(st *state.ScribbleState) (*http.Server, chan error) {
 	mux := http.NewServeMux()
-	mux.Handle("GET /", middleware.ValidateTokenMiddleware(st.Cfg, get.DispatchGet(st)))
-	mux.Handle("POST /", middleware.ValidateTokenMiddleware(st.Cfg, post.DispatchPost(st)))
-	mux.Handle("POST /media", middleware.ValidateTokenMiddleware(st.Cfg, upload.HandleMediaUpload(st)))
+	mux.Handle("GET /micropub", middleware.ValidateTokenMiddleware(st.Cfg, micropubget.DispatchGet(st)))
+	mux.Handle("POST /micropub", middleware.ValidateTokenMiddleware(st.Cfg, micropubpost.DispatchPost(st)))
+	mux.Handle("POST /micropub/media", middleware.ValidateTokenMiddleware(st.Cfg, micropubupload.HandleMediaUpload(st)))
+	mux.Handle("GET /query/list", query.HandleList(st))
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf("%v:%v", st.Cfg.Server.Address, st.Cfg.Server.Port),
+		Addr:    st.Cfg.Server.Binding.AddressPort(),
 		Handler: mux,
 	}
 
 	errChan := make(chan error, 1)
+
 	go func() {
 		log.Printf("serving http requests on %q", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -48,20 +67,19 @@ func StartServer(cfg *config.Config) error {
 		}
 	}()
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	return srv, errChan
+}
 
-	select {
-	case sig := <-sigChan:
-		log.Printf("received signal %v, shutting down...", sig)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
-			log.Printf("graceful shutdown failed: %v", err)
-		}
-		return nil
-	case err := <-errChan:
-		return err
+func shutdownServerGracefully(srv *http.Server) {
+	if srv == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("graceful shutdown failed: %v", err)
 	}
 }
 

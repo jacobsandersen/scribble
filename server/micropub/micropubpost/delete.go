@@ -1,10 +1,10 @@
-package post
+package micropubpost
 
 import (
 	"net/http"
 
 	"github.com/indieinfra/scribble/server/auth"
-	"github.com/indieinfra/scribble/server/handler/common"
+	"github.com/indieinfra/scribble/server/micropub/micropubcommon"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/server/util"
@@ -34,7 +34,7 @@ func Delete(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 		}
 
 		if err := st.ContentStore.Undelete(r.Context(), url); err != nil {
-			common.LogAndWriteError(w, r, "undelete content", err)
+			micropubcommon.LogAndWriteError(w, r, "undelete content", err)
 		} else {
 			resp.WriteNoContent(w)
 		}
@@ -44,7 +44,7 @@ func Delete(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 		}
 
 		if err := st.ContentStore.Delete(r.Context(), url); err != nil {
-			common.LogAndWriteError(w, r, "delete content", err)
+			micropubcommon.LogAndWriteError(w, r, "delete content", err)
 		} else {
 			resp.WriteNoContent(w)
 		}
