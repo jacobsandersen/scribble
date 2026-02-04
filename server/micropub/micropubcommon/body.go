@@ -24,6 +24,7 @@ type ParsedBody struct {
 func ReadBody(cfg *config.Config, w http.ResponseWriter, r *http.Request) (*ParsedBody, bool) {
 	_, contentType, ok := util.RequireValidMicropubContentType(w, r)
 	if !ok {
+		resp.WriteInvalidRequest(w, fmt.Sprintf("Invalid Content-Type %q", contentType))
 		return nil, false
 	}
 

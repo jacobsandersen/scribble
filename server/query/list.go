@@ -1,7 +1,6 @@
 package query
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/indieinfra/scribble/server/body"
@@ -15,7 +14,9 @@ func HandleList(st *state.ScribbleState) http.HandlerFunc {
 		params := body.ReadQueryParams(r)
 
 		filter := content.QueryDocumentsFilter{
+			Slug:           body.GetFirstOrNil(&params, "slug"),
 			Category:       body.GetFirstOrNil(&params, "category"),
+			CreatedYear:    body.GetIntOrNil[int64](&params, "year"),
 			CreatedMonth:   body.GetIntOrNil[int64](&params, "month"),
 			CreatedDay:     body.GetIntOrNil[int64](&params, "day"),
 			CreatedWeekday: body.GetIntOrNil[int64](&params, "weekday"),
@@ -34,7 +35,7 @@ func HandleList(st *state.ScribbleState) http.HandlerFunc {
 
 		results, err := st.ContentStore.Query(r.Context(), page, limit, filter)
 		if err != nil {
-			resp.WriteInternalServerError(w, fmt.Sprintf("failed to query documents: %v", err))
+			resp.LogAndWriteError(w, r, "query documents", err)
 			return
 		}
 

@@ -1,4 +1,4 @@
-package micropubcommon
+package resp
 
 import (
 	"errors"
@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/util"
 	"github.com/indieinfra/scribble/storage/content"
 )
@@ -17,13 +16,12 @@ func LogAndWriteError(w http.ResponseWriter, r *http.Request, op string, err err
 	if rl == nil {
 		rl = util.WithRequest(log.Default(), r, "")
 	}
-	rl.Errorf("micropub %s failed: %v", op, err)
+	rl.Errorf("%s failed: %v", op, err)
 
-	// Map known errors to user-friendly responses.
 	switch {
 	case errors.Is(err, content.ErrNotFound):
-		resp.WriteNotFound(w, "not found")
+		WriteNotFound(w, "not found")
 	default:
-		resp.WriteInternalServerError(w, fmt.Sprintf("%s failed", op))
+		WriteInternalServerError(w, fmt.Sprintf("%s failed", op))
 	}
 }

@@ -11,6 +11,10 @@ SELECT doc FROM scribble_content
 -- name: QueryDocuments :many
 SELECT c.doc FROM scribble_content c
     WHERE (
+        CAST(sqlc.arg('apply_slug') AS INTEGER) = 0
+        OR c.slug = sqlc.arg('slug')
+    )
+        AND (
             CAST(sqlc.arg('apply_category') AS INTEGER) = 0
             OR EXISTS (
                 SELECT 1
