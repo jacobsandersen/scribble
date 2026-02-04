@@ -4,7 +4,17 @@ CREATE TABLE IF NOT EXISTS scribble_content (
     slug TEXT GENERATED ALWAYS AS (json_extract(doc, '$.properties.slug[0]')) STORED,
     deleted INTEGER GENERATED ALWAYS AS (CASE WHEN json_extract(doc, '$.properties.deleted[0]') = 1 THEN 1 ELSE 0 END) STORED,
     status TEXT GENERATED ALWAYS AS (json_extract(doc, '$.properties."post-status"[0]')) STORED,
-    visible INTEGER GENERATED ALWAYS AS (CASE WHEN deleted = 0 AND (status is null OR status = 'published' OR status = 'unlisted') THEN 1 ELSE 0 END) STORED,
+    visibility TEXT GENERATED ALWAYS AS (json_extract(doc, '$.properties.visibility[0]')) STORED,
+    is_unlisted INTEGER GENERATED ALWAYS AS (CASE WHEN visibility = 'unlisted' THEN 1 ELSE 0 END) STORED,
+    is_visible INTEGER GENERATED ALWAYS AS (
+        CASE WHEN 
+                deleted = 0 
+                AND (status is null OR status = 'published') 
+                AND (visiblity is null OR visibility = 'public' OR visibility = 'unlisted') 
+            THEN 1 
+            ELSE 0 
+        END
+    ) STORED,
     created_at TEXT GENERATED ALWAYS AS (json_extract(doc, '$.properties.created_at[0]')) STORED,
     created_year INTEGER GENERATED ALWAYS AS (CAST(strftime('%Y', created_at) AS INTEGER)) STORED,
     created_month INTEGER GENERATED ALWAYS AS (CAST(strftime('%m', created_at) AS INTEGER)) STORED,
