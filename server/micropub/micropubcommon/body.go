@@ -53,7 +53,7 @@ func readJSON(cfg *config.Config, w http.ResponseWriter, r *http.Request) map[st
 	out := make(map[string]any)
 
 	r.Body = http.MaxBytesReader(w, r.Body, int64(cfg.Server.Limits.MaxPayloadSize))
-	if err := json.NewDecoder(r.Body).Decode(&out); err != nil {
+	if json.NewDecoder(r.Body).Decode(&out) != nil {
 		resp.WriteInvalidRequest(w, "Invalid JSON body")
 		return nil
 	}

@@ -106,7 +106,7 @@ func StringToNullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
 
-func NormalizePagination(perPage int, page int, limit int) (int, int, int) {
+func NormalizePagination(perPage, page, limit int) (int, int, int) {
 	if page < 1 {
 		page = 1
 	}
