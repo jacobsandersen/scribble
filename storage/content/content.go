@@ -7,12 +7,14 @@ import (
 )
 
 type QueryDocumentsFilter struct {
-	Slug           *string
-	Category       *string
-	CreatedYear    *int64
-	CreatedMonth   *int64
-	CreatedDay     *int64
-	CreatedWeekday *int64
+	Slug             *string
+	Category         *string
+	CreatedYear      *int64
+	CreatedMonth     *int64
+	CreatedDay       *int64
+	CreatedWeekday   *int64
+	CreatedWeek      *int64
+	CreatedDayOfYear *int64
 }
 
 type Store interface {

@@ -125,19 +125,23 @@ func NormalizePagination(perPage, page, limit int) (int, int, int) {
 
 func QueryDocumentsParamsFromFilter(limit, offset int, filter QueryDocumentsFilter) db.QueryDocumentsParams {
 	var (
-		slug           sql.NullString
-		category       string
-		createdYear    sql.NullInt64
-		createdMonth   sql.NullInt64
-		createdDay     sql.NullInt64
-		createdWeekday sql.NullInt64
+		slug             sql.NullString
+		category         string
+		createdYear      sql.NullInt64
+		createdMonth     sql.NullInt64
+		createdDay       sql.NullInt64
+		createdWeekday   sql.NullInt64
+		createdWeek      sql.NullInt64
+		createdDayOfYear sql.NullInt64
 
-		applySlug           int64
-		applyCategory       int64
-		applyCreatedYear    int64
-		applyCreatedMonth   int64
-		applyCreatedDay     int64
-		applyCreatedWeekday int64
+		applySlug             int64
+		applyCategory         int64
+		applyCreatedYear      int64
+		applyCreatedMonth     int64
+		applyCreatedDay       int64
+		applyCreatedWeekday   int64
+		applyCreatedWeek      int64
+		applyCreatedDayOfYear int64
 	)
 
 	if filter.Slug != nil {
@@ -164,21 +168,33 @@ func QueryDocumentsParamsFromFilter(limit, offset int, filter QueryDocumentsFilt
 		applyCreatedWeekday = 1
 		createdWeekday = sql.NullInt64{Int64: *filter.CreatedWeekday, Valid: true}
 	}
+	if filter.CreatedWeek != nil {
+		applyCreatedWeek = 1
+		createdWeek = sql.NullInt64{Int64: *filter.CreatedWeek, Valid: true}
+	}
+	if filter.CreatedDayOfYear != nil {
+		applyCreatedDayOfYear = 1
+		createdDayOfYear = sql.NullInt64{Int64: *filter.CreatedDayOfYear, Valid: true}
+	}
 
 	return db.QueryDocumentsParams{
-		Column1:        applySlug,
-		Slug:           slug,
-		Column3:        applyCategory,
-		Category:       category,
-		Column5:        applyCreatedYear,
-		CreatedYear:    createdYear,
-		Column7:        applyCreatedMonth,
-		CreatedMonth:   createdMonth,
-		Column9:        applyCreatedDay,
-		CreatedDay:     createdDay,
-		Column11:       applyCreatedWeekday,
-		CreatedWeekday: createdWeekday,
-		Offset:         int64(offset),
-		Limit:          int64(limit),
+		Column1:          applySlug,
+		Slug:             slug,
+		Column3:          applyCategory,
+		Category:         category,
+		Column5:          applyCreatedYear,
+		CreatedYear:      createdYear,
+		Column7:          applyCreatedMonth,
+		CreatedMonth:     createdMonth,
+		Column9:          applyCreatedDay,
+		CreatedDay:       createdDay,
+		Column11:         applyCreatedWeekday,
+		CreatedWeekday:   createdWeekday,
+		Column13:         applyCreatedWeek,
+		CreatedWeek:      createdWeek,
+		Column15:         applyCreatedDayOfYear,
+		CreatedDayOfYear: createdDayOfYear,
+		Offset:           int64(offset),
+		Limit:            int64(limit),
 	}
 }
