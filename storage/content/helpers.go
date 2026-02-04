@@ -166,19 +166,19 @@ func QueryDocumentsParamsFromFilter(limit, offset int, filter QueryDocumentsFilt
 	}
 
 	return db.QueryDocumentsParams{
-		ApplySlug:           applySlug,
-		Slug:                slug,
-		ApplyCategory:       applyCategory,
-		Category:            category,
-		ApplyCreatedYear:    applyCreatedYear,
-		CreatedYear:         createdYear,
-		ApplyCreatedMonth:   applyCreatedMonth,
-		CreatedMonth:        createdMonth,
-		ApplyCreatedDay:     applyCreatedDay,
-		CreatedDay:          createdDay,
-		ApplyCreatedWeekday: applyCreatedWeekday,
-		CreatedWeekday:      createdWeekday,
-		Offset:              int64(offset),
-		Limit:               int64(limit),
+		Column1:        applySlug,
+		Slug:           slug,
+		Column3:        applyCategory,
+		Category:       category,
+		Column5:        applyCreatedYear,
+		CreatedYear:    createdYear,
+		Column7:        applyCreatedMonth,
+		CreatedMonth:   createdMonth,
+		Column9:        applyCreatedDay,
+		CreatedDay:     createdDay,
+		Column11:       applyCreatedWeekday,
+		CreatedWeekday: createdWeekday,
+		Offset:         int64(offset),
+		Limit:          int64(limit),
 	}
 }
