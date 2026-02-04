@@ -1,4 +1,4 @@
-package get
+package micropubget
 
 import (
 	"net/http"
@@ -18,7 +18,8 @@ func DispatchGet(st *state.ScribbleState) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		params := body.ReadQueryParams(r)
-		query := params.GetFirst("q")
+
+		query := body.GetFirst(&params, "q")
 		if query != "" {
 			if handler, ok := handlers[query]; ok {
 				handler(st, w, r, params)

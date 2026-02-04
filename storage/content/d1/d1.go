@@ -51,23 +51,6 @@ func NewD1ContentStore(cfg *config.Content) (*StoreImpl, error) {
 	}, nil
 }
 
-func (cs *StoreImpl) normalizePagination(page int, limit int) (int, int, int) {
-	if page < 1 {
-		page = 1
-	}
-
-	if limit <= 0 || limit > cs.pagination.PerPage {
-		limit = cs.pagination.PerPage
-	}
-
-	offset := 0
-	if page > 1 {
-		offset = (page - 1) * limit
-	}
-
-	return page, limit, offset
-}
-
 func (cs *StoreImpl) Create(ctx context.Context, doc util.Mf2Document) (bool, error) {
 	payload, err := json.Marshal(doc)
 	if err != nil {
@@ -109,15 +92,15 @@ func (cs *StoreImpl) Update(ctx context.Context, url string, replacements map[st
 			return nil, fmt.Errorf("failed to insert new row for slug change: %w", err)
 		}
 
-		if err := cs.queries.DeleteDocumentBySlug(ctx, oldSlug); err != nil {
-			if rbErr := cs.queries.DeleteDocumentBySlug(ctx, newSlug); rbErr != nil {
+		if err := cs.queries.DeleteDocumentBySlug(ctx, content.StringToNullString(oldSlug)); err != nil {
+			if rbErr := cs.queries.DeleteDocumentBySlug(ctx, content.StringToNullString(newSlug)); rbErr != nil {
 				return nil, fmt.Errorf("failed to delete old row and rollback failed (system inconsistent): delete_error=%w, rollback_error=%v", err, rbErr)
 			}
 
 			return nil, fmt.Errorf("failed to delete old row after slug change: %w", err)
 		}
 	} else {
-		if err := cs.queries.UpdateDocumentBySlug(ctx, db.UpdateDocumentBySlugParams{Doc: string(payload), Slug: newSlug}); err != nil {
+		if err := cs.queries.UpdateDocumentBySlug(ctx, db.UpdateDocumentBySlugParams{Doc: string(payload), Slug: content.StringToNullString(newSlug)}); err != nil {
 			return nil, fmt.Errorf("failed to update document: %w", err)
 		}
 	}
@@ -145,14 +128,32 @@ func (cs *StoreImpl) Get(ctx context.Context, url string) (*util.Mf2Document, er
 }
 
 func (cs *StoreImpl) List(ctx context.Context, page int, limit int) ([]util.Mf2Document, error) {
-	_, limit, offset := cs.normalizePagination(page, limit)
+	_, limit, offset := content.NormalizePagination(cs.pagination.PerPage, page, limit)
+
 	rows, err := cs.queries.ListDocuments(ctx, db.ListDocumentsParams{Limit: int64(limit), Offset: int64(offset)})
 	if err != nil {
 		return nil, err
 	}
 
+	return parseRowsToDocuments(rows), nil
+}
+
+func (cs *StoreImpl) Query(ctx context.Context, page int, limit int, filter content.QueryDocumentsFilter) ([]util.Mf2Document, error) {
+	_, limit, offset := content.NormalizePagination(cs.pagination.PerPage, page, limit)
+
+	params := content.QueryDocumentsParamsFromFilter(limit, offset, filter)
+
+	rows, err := cs.queries.QueryDocuments(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseRowsToDocuments(rows), nil
+}
+
+func parseRowsToDocuments(rows []string) []util.Mf2Document {
 	if len(rows) == 0 {
-		return []util.Mf2Document{}, nil
+		return []util.Mf2Document{}
 	}
 
 	docs := make([]util.Mf2Document, 0, len(rows))
@@ -166,14 +167,14 @@ func (cs *StoreImpl) List(ctx context.Context, page int, limit int) ([]util.Mf2D
 		docs = append(docs, doc)
 	}
 
-	return docs, nil
+	return docs
 }
 
 func (cs *StoreImpl) ListCategories(ctx context.Context, page int, limit int, filter string) ([]string, error) {
 	var rows []string
 	var err error
 
-	_, limit, offset := cs.normalizePagination(page, limit)
+	_, limit, offset := content.NormalizePagination(cs.pagination.PerPage, page, limit)
 
 	if filter != "" {
 		rows, err = cs.queries.ListCategoriesLike(ctx, db.ListCategoriesLikeParams{Category: filter, Limit: int64(limit), Offset: int64(offset)})
@@ -198,7 +199,7 @@ func (cs *StoreImpl) ListCategories(ctx context.Context, page int, limit int, fi
 }
 
 func (cs *StoreImpl) getDocBySlug(ctx context.Context, slug string) (*util.Mf2Document, error) {
-	document, err := cs.queries.GetDocumentBySlug(ctx, slug)
+	document, err := cs.queries.GetDocumentBySlug(ctx, content.StringToNullString(slug))
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +217,7 @@ func (cs *StoreImpl) getDocBySlug(ctx context.Context, slug string) (*util.Mf2Do
 }
 
 func (cs *StoreImpl) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
-	exists, err := cs.queries.DocExistsBySlug(ctx, slug)
+	exists, err := cs.queries.DocExistsBySlug(ctx, content.StringToNullString(slug))
 	if err != nil {
 		return false, err
 	}

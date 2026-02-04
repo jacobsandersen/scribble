@@ -1,4 +1,4 @@
-package post
+package micropubpost
 
 import (
 	"fmt"
@@ -7,28 +7,28 @@ import (
 	"strings"
 
 	"github.com/indieinfra/scribble/server/auth"
-	"github.com/indieinfra/scribble/server/body"
+	"github.com/indieinfra/scribble/server/micropub/micropubcommon"
 	"github.com/indieinfra/scribble/server/middleware"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 )
 
 func DispatchPost(st *state.ScribbleState) http.HandlerFunc {
-	handlers := map[string]func(*state.ScribbleState, http.ResponseWriter, *http.Request, *body.ParsedBody){
+	handlers := map[string]func(*state.ScribbleState, http.ResponseWriter, *http.Request, *micropubcommon.ParsedBody){
 		"create": Create,
-		"update": func(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb *body.ParsedBody) {
+		"update": func(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb *micropubcommon.ParsedBody) {
 			Update(st, w, r, pb.Data)
 		},
-		"delete": func(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb *body.ParsedBody) {
+		"delete": func(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb *micropubcommon.ParsedBody) {
 			Delete(st, w, r, pb.Data, false)
 		},
-		"undelete": func(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb *body.ParsedBody) {
+		"undelete": func(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb *micropubcommon.ParsedBody) {
 			Delete(st, w, r, pb.Data, true)
 		},
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		parsed, ok := body.ReadBody(st.Cfg, w, r)
+		parsed, ok := micropubcommon.ReadBody(st.Cfg, w, r)
 		if !ok {
 			return
 		}

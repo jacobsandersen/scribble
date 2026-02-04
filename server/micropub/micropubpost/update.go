@@ -1,4 +1,4 @@
-package post
+package micropubpost
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/indieinfra/scribble/server/auth"
-	"github.com/indieinfra/scribble/server/handler/micropub/common"
+	"github.com/indieinfra/scribble/server/micropub/micropubcommon"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/server/util"
@@ -62,13 +62,13 @@ func Update(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 
 	doc, err := st.ContentStore.Update(r.Context(), url, replacements, additions, deletions)
 	if err != nil {
-		common.LogAndWriteError(w, r, "update content", err)
+		micropubcommon.LogAndWriteError(w, r, "update content", err)
 		return
 	}
 
 	slug, err := content.ExtractSlug(*doc)
 	if err != nil {
-		common.LogAndWriteError(w, r, "extract slug after update", err)
+		micropubcommon.LogAndWriteError(w, r, "extract slug after update", err)
 		resp.WriteNoContent(w) // Pray and return; we don't know if the URL changed
 		return
 	}
@@ -76,14 +76,14 @@ func Update(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 	if !strings.EqualFold(slug, oldSlug) {
 		timeCreatedStr, ok := doc.GetFirstStringProp("created_at")
 		if !ok {
-			common.LogAndWriteError(w, r, "get created_at after slug change", fmt.Errorf("missing created_at property"))
+			micropubcommon.LogAndWriteError(w, r, "get created_at after slug change", fmt.Errorf("missing created_at property"))
 			resp.WriteNoContent(w) // We know the url changed, but can't generate the new one without created_at
 			return
 		}
 
 		timeCreated, err := time.ParseInLocation(time.RFC3339, timeCreatedStr, time.Local)
 		if err != nil {
-			common.LogAndWriteError(w, r, "parse created_at after slug change", err)
+			micropubcommon.LogAndWriteError(w, r, "parse created_at after slug change", err)
 			resp.WriteNoContent(w) // We know the url changed, but can't generate the new one without (valid!) created_at
 			return
 		}

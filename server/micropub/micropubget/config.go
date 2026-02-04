@@ -1,4 +1,4 @@
-package get
+package micropubget
 
 import (
 	"fmt"
@@ -28,7 +28,7 @@ type Config struct {
 
 func HandleConfig(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, p body.QueryParams) {
 	cfgOut := Config{
-		MediaEndpoint: fmt.Sprintf("%v/media", st.Cfg.Server.Micropub.PublicUrl),
+		MediaEndpoint: fmt.Sprintf("%v/micropub/media", st.Cfg.Server.PublicUrl),
 		SyndicateTo:   []SyndicateTo{},
 	}
 

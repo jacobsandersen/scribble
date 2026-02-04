@@ -1,11 +1,11 @@
-package upload
+package micropubupload
 
 import (
 	"net/http"
 	"time"
 
 	"github.com/indieinfra/scribble/server/auth"
-	"github.com/indieinfra/scribble/server/handler/micropub/common"
+	"github.com/indieinfra/scribble/server/micropub/micropubcommon"
 	"github.com/indieinfra/scribble/server/middleware"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
@@ -19,12 +19,12 @@ func HandleMediaUpload(st *state.ScribbleState) http.HandlerFunc {
 			return
 		}
 
-		limits := st.Cfg.Server.Micropub.Limits
+		limits := st.Cfg.Server.Limits
 		maxMemory := int64(limits.MaxMultipartMem)
 		maxSize := int64(limits.MaxFileSize)
 		parsed, err := util.ParseMultipart(w, r, maxMemory, maxSize)
 		if err != nil {
-			common.LogAndWriteError(w, r, "parse multipart", err)
+			micropubcommon.LogAndWriteError(w, r, "parse multipart", err)
 			return
 		}
 
@@ -52,13 +52,13 @@ func HandleMediaUpload(st *state.ScribbleState) http.HandlerFunc {
 		fileUrl := st.MediaPathPattern.GenerateMedia(time.Now().Local(), file.FileExtension)
 		fileKey, err := util.GetUrlPath(fileUrl)
 		if err != nil {
-			common.LogAndWriteError(w, r, "generate path from pattern", err)
+			micropubcommon.LogAndWriteError(w, r, "generate path from pattern", err)
 			return
 		}
 
 		err = st.MediaStore.Upload(r.Context(), file, fileKey)
 		if err != nil {
-			common.LogAndWriteError(w, r, "upload media", err)
+			micropubcommon.LogAndWriteError(w, r, "upload media", err)
 			return
 		}
 
