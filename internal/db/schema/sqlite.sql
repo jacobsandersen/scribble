@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS scribble_content (
         CASE WHEN 
                 deleted = 0 
                 AND (status is null OR status = 'published') 
-                AND (visiblity is null OR visibility = 'public' OR visibility = 'unlisted') 
+                AND (visibility is null OR visibility = 'public' OR visibility = 'unlisted') 
             THEN 1 
             ELSE 0 
         END
