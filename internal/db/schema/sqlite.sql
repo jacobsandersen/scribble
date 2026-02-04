@@ -24,6 +24,8 @@ CREATE INDEX IF NOT EXISTS idx_created_month_day ON scribble_content(created_mon
 
 CREATE INDEX IF NOT EXISTS idx_created_year_month ON scribble_content(created_year, created_month);
 
+CREATE INDEX IF NOT EXISTS idx_created_weekday ON scribble_content(created_weekday);
+
 CREATE INDEX IF NOT EXISTS idx_doc_updated ON scribble_content(updated_at);
 
 CREATE TABLE IF NOT EXISTS scribble_categories (
