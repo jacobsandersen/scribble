@@ -20,7 +20,11 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 		return
 	}
 
-	ct, _ := util.ExtractMediaType(w, r)
+	ct, ok := util.ExtractMediaType(w, r)
+	if !ok {
+		resp.WriteInvalidRequest(w, "missing or invalid Content-Type")
+		return
+	}
 
 	document, err := buildDocument(ct, pb.Data)
 	if err != nil {
@@ -36,13 +40,13 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 		objectUrl := st.MediaPathPattern.GenerateMedia(time.Now(), pf.FileExtension)
 		objectKey, err := util.GetUrlPath(objectUrl)
 		if err != nil {
-			micropubcommon.LogAndWriteError(w, r, "derive s3 object key", err)
+			resp.LogAndWriteError(w, r, "derive s3 object key", err)
 			return
 		}
 
 		err = st.MediaStore.Upload(r.Context(), pf, strings.TrimPrefix(objectUrl, objectKey))
 		if err != nil {
-			micropubcommon.LogAndWriteError(w, r, "upload media", err)
+			resp.LogAndWriteError(w, r, "upload media", err)
 			return
 		}
 
@@ -56,7 +60,7 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 
 	slug, err := content.EnsureUniqueSlug(r.Context(), st.ContentStore, deriveSuggestedSlug(&document))
 	if err != nil {
-		micropubcommon.LogAndWriteError(w, r, "slug creation", err)
+		resp.LogAndWriteError(w, r, "slug creation", err)
 		return
 	}
 
@@ -72,13 +76,13 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 
 	immediate, err := st.ContentStore.Create(r.Context(), document)
 	if err != nil {
-		micropubcommon.LogAndWriteError(w, r, "create content", err)
+		resp.LogAndWriteError(w, r, "create content", err)
 		return
 	}
 
 	url, err := st.ContentPathPattern.GenerateContent(timeNow, slug)
 	if err != nil {
-		micropubcommon.LogAndWriteError(w, r, "generate content URL", err)
+		resp.LogAndWriteError(w, r, "generate content URL", err)
 		return
 	}
 

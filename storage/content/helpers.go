@@ -125,12 +125,14 @@ func NormalizePagination(perPage, page, limit int) (int, int, int) {
 
 func QueryDocumentsParamsFromFilter(limit, offset int, filter QueryDocumentsFilter) db.QueryDocumentsParams {
 	var (
+		slug           sql.NullString
+		category       string
 		createdYear    sql.NullInt64
 		createdMonth   sql.NullInt64
 		createdDay     sql.NullInt64
 		createdWeekday sql.NullInt64
-		category       string
 
+		applySlug           int64
 		applyCategory       int64
 		applyCreatedYear    int64
 		applyCreatedMonth   int64
@@ -138,6 +140,10 @@ func QueryDocumentsParamsFromFilter(limit, offset int, filter QueryDocumentsFilt
 		applyCreatedWeekday int64
 	)
 
+	if filter.Slug != nil {
+		applySlug = 1
+		slug = sql.NullString{String: *filter.Slug, Valid: true}
+	}
 	if filter.Category != nil {
 		applyCategory = 1
 		category = *filter.Category
@@ -160,6 +166,8 @@ func QueryDocumentsParamsFromFilter(limit, offset int, filter QueryDocumentsFilt
 	}
 
 	return db.QueryDocumentsParams{
+		ApplySlug:           applySlug,
+		Slug:                slug,
 		ApplyCategory:       applyCategory,
 		Category:            category,
 		ApplyCreatedYear:    applyCreatedYear,

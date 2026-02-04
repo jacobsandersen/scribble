@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/indieinfra/scribble/server/body"
-	"github.com/indieinfra/scribble/server/micropub/micropubcommon"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 )
@@ -25,7 +24,7 @@ func HandleCategory(st *state.ScribbleState, w http.ResponseWriter, r *http.Requ
 
 	categories, err := st.ContentStore.ListCategories(r.Context(), page, limit, filter)
 	if err != nil {
-		micropubcommon.LogAndWriteError(w, r, "list categories", err)
+		resp.LogAndWriteError(w, r, "list categories", err)
 		return
 	}
 

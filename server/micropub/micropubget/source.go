@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	"github.com/indieinfra/scribble/server/body"
-	"github.com/indieinfra/scribble/server/micropub/micropubcommon"
 	"github.com/indieinfra/scribble/server/resp"
 	"github.com/indieinfra/scribble/server/state"
 	"github.com/indieinfra/scribble/server/util"
@@ -45,7 +44,7 @@ func handleMany(st *state.ScribbleState, w http.ResponseWriter, r *http.Request,
 
 	docs, err := st.ContentStore.List(r.Context(), page, limit)
 	if err != nil {
-		micropubcommon.LogAndWriteError(w, r, "list content", err)
+		resp.LogAndWriteError(w, r, "list content", err)
 		return
 	}
 
@@ -55,7 +54,7 @@ func handleMany(st *state.ScribbleState, w http.ResponseWriter, r *http.Request,
 func handleOne(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, p body.QueryParams, url string) {
 	doc, err := st.ContentStore.Get(r.Context(), url)
 	if err != nil {
-		micropubcommon.LogAndWriteError(w, r, "get content", err)
+		resp.LogAndWriteError(w, r, "get content", err)
 		return
 	}
 

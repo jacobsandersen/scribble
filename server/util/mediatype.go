@@ -1,12 +1,9 @@
 package util
 
 import (
-	"fmt"
 	"mime"
 	"net/http"
 	"slices"
-
-	"github.com/indieinfra/scribble/server/resp"
 )
 
 func RequireValidMicropubContentType(w http.ResponseWriter, r *http.Request) (string, string, bool) {
@@ -20,13 +17,11 @@ func RequireValidMediaContentType(w http.ResponseWriter, r *http.Request) (strin
 func ExtractMediaType(w http.ResponseWriter, r *http.Request) (string, bool) {
 	ct := r.Header.Get("Content-Type")
 	if ct == "" {
-		resp.WriteInvalidRequest(w, "missing Content-Type")
 		return "", false
 	}
 
 	mediaType, _, err := mime.ParseMediaType(ct)
 	if err != nil {
-		resp.WriteInvalidRequest(w, fmt.Sprintf("Invalid Content-Type: %v", err))
 		return "", false
 	}
 
@@ -46,7 +41,6 @@ func requireValidContentType(w http.ResponseWriter, r *http.Request, valid []str
 	if slices.Contains(valid, mediaType) {
 		return r.Method, mediaType, true
 	} else {
-		resp.WriteInvalidRequest(w, fmt.Sprintf("Invalid Content-Type %q: only %v allowed", mediaType, valid))
 		return r.Method, mediaType, false
 	}
 }
