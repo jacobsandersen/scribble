@@ -11,36 +11,36 @@ SELECT doc FROM scribble_content
 -- name: QueryDocuments :many
 SELECT c.doc FROM scribble_content c
     WHERE (
-        CAST(sqlc.arg('apply_slug') AS INTEGER) = 0
-        OR c.slug = sqlc.arg('slug')
+        CAST(? AS INTEGER) = 0
+        OR c.slug = ?
     )
         AND (
-            CAST(sqlc.arg('apply_category') AS INTEGER) = 0
+            CAST(? AS INTEGER) = 0
             OR EXISTS (
                 SELECT 1
                 FROM scribble_categories cat
                 WHERE cat.doc_id = c.id
-                    AND cat.category = sqlc.arg('category')
+                    AND cat.category = ?
             )
         )
         AND (
-            CAST(sqlc.arg('apply_created_year') AS INTEGER) = 0
-            OR c.created_year = sqlc.arg('created_year')
+            CAST(? AS INTEGER) = 0
+            OR c.created_year = ?
         )
         AND (
-            CAST(sqlc.arg('apply_created_month') AS INTEGER) = 0
-            OR c.created_month = sqlc.arg('created_month')
+            CAST(? AS INTEGER) = 0
+            OR c.created_month = ?
         )
         AND (
-            CAST(sqlc.arg('apply_created_day') AS INTEGER) = 0
-            OR c.created_day = sqlc.arg('created_day')
+            CAST(? AS INTEGER) = 0
+            OR c.created_day = ?
         )
         AND (
-            CAST(sqlc.arg('apply_created_weekday') AS INTEGER) = 0
-            OR c.created_weekday = sqlc.arg('created_weekday')
+            CAST(? AS INTEGER) = 0
+            OR c.created_weekday = ?
         )
     ORDER BY c.created_at DESC
-    LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+    LIMIT ? OFFSET ?;
 
 -- name: ListCategories :many
 SELECT DISTINCT category FROM scribble_categories 
