@@ -81,11 +81,11 @@ content:
 media:
   # The full URL that your media will be accessible from. Supports some placeholders, including
   # {year}, {month}, {day}, {uuid}, and {ext}. UUID is always required, but may appear anywhere in 
-  # the path. Ext is the file extension (automatically determined by content type), not including the 
-  # leading dot (e.g., "jpg"). The path component (following the domain) generally becomes the object 
+  # the path. Ext is the file extension (automatically determined by content type), including the 
+  # leading dot (e.g., ".jpg"). The path component (following the domain) generally becomes the object 
   # key in your storage backend. Your frontend must support the same URL structure to serve the media 
   # correctly, else you'll get 404s.
-  media_url: "https://example.org/{year}/{month}/{day}/{uuid}.{ext}"
+  media_url: "https://example.org/{year}/{month}/{day}/{uuid}{ext}"
 
   # Which storage strategy to use for media storage (currently only "s3" is supported)
   strategy: s3

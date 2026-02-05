@@ -2,7 +2,6 @@ package util
 
 import (
 	"fmt"
-	"path"
 	"strings"
 	"time"
 
@@ -38,7 +37,7 @@ func (p *PathPattern) GenerateContent(time time.Time, slug string) (string, erro
 	result := p.generateCommon(time)
 	result = strings.ReplaceAll(result, "{slug}", slug)
 
-	return path.Clean(result), nil
+	return strings.TrimSpace(strings.Trim(result, "/")), nil
 }
 
 func (p *PathPattern) GenerateMedia(time time.Time, ext string) string {
@@ -46,7 +45,7 @@ func (p *PathPattern) GenerateMedia(time time.Time, ext string) string {
 	result = strings.ReplaceAll(result, "{uuid}", uuid.New().String())
 	result = strings.ReplaceAll(result, "{ext}", ext)
 
-	return path.Clean(result)
+	return strings.TrimSpace(strings.Trim(result, "/"))
 }
 
 func (p *PathPattern) generateCommon(time time.Time) string {
