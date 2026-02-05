@@ -58,10 +58,10 @@ func handleOne(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	resp.WriteOK(w, filterDoc(*doc, body.Get(&p, "properties")))
+	resp.WriteOK(w, filterDoc(doc, body.Get(&p, "properties")))
 }
 
-func filterDocs(docs []util.Mf2Document, properties *body.QueryParam) []any {
+func filterDocs(docs []*util.Mf2Document, properties *body.QueryParam) []any {
 	out := make([]any, 0, len(docs))
 
 	for _, doc := range docs {
@@ -74,7 +74,7 @@ func filterDocs(docs []util.Mf2Document, properties *body.QueryParam) []any {
 	return out
 }
 
-func filterDoc(doc util.Mf2Document, properties *body.QueryParam) any {
+func filterDoc(doc *util.Mf2Document, properties *body.QueryParam) any {
 	if properties == nil {
 		return doc
 	}

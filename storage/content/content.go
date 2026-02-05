@@ -28,9 +28,11 @@ type Store interface {
 
 	Get(ctx context.Context, url string) (doc *util.Mf2Document, err error)
 
-	List(ctx context.Context, page int, limit int) (results []util.Mf2Document, err error)
+	GetBySlug(ctx context.Context, slug string) (doc *util.Mf2Document, err error)
 
-	Query(ctx context.Context, page int, limit int, filter QueryDocumentsFilter) (results []util.Mf2Document, err error)
+	List(ctx context.Context, page int, limit int) (results []*util.Mf2Document, err error)
+
+	Query(ctx context.Context, page int, limit int, filter QueryDocumentsFilter) (results []*util.Mf2Document, err error)
 
 	ListCategories(ctx context.Context, page int, limit int, filter string) (results []string, err error)
 
