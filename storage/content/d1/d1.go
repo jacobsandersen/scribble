@@ -172,7 +172,7 @@ func (cs *StoreImpl) ListCategories(ctx context.Context, page int, limit int, fi
 	_, limit, offset := content.NormalizePagination(cs.pagination.PerPage, page, limit)
 
 	if filter != "" {
-		rows, err = cs.queries.ListCategoriesLike(ctx, db.ListCategoriesLikeParams{Category: filter, Limit: int64(limit), Offset: int64(offset)})
+		rows, err = cs.queries.ListCategoriesLike(ctx, db.ListCategoriesLikeParams{Category: fmt.Sprintf("%%%s%%", filter), Limit: int64(limit), Offset: int64(offset)})
 	} else {
 		rows, err = cs.queries.ListCategories(ctx, db.ListCategoriesParams{Limit: int64(limit), Offset: int64(offset)})
 	}
