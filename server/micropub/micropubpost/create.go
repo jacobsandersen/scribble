@@ -66,6 +66,11 @@ func Create(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, pb 
 
 	document.SetProp("slug", slug)
 
+	visibility, ok := document.GetFirstStringProp("visibility")
+	if ok && strings.EqualFold(visibility, "unlisted") {
+		document.SetProp("slug", uuid.New().String()) // override slug for unlisted posts
+	}
+
 	if !document.HasProp("created_at") {
 		document.SetProp("created_at", timeStr)
 	}

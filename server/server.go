@@ -51,6 +51,7 @@ func runServer(st *state.ScribbleState) (*http.Server, chan error) {
 	mux.Handle("GET /micropub", middleware.ValidateTokenMiddleware(st.Cfg, micropubget.DispatchGet(st)))
 	mux.Handle("POST /micropub", middleware.ValidateTokenMiddleware(st.Cfg, micropubpost.DispatchPost(st)))
 	mux.Handle("POST /micropub/media", middleware.ValidateTokenMiddleware(st.Cfg, micropubupload.HandleMediaUpload(st)))
+	mux.Handle("GET /query/find", query.HandleFind(st))
 	mux.Handle("GET /query/list", query.HandleList(st))
 
 	srv := &http.Server{

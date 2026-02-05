@@ -70,7 +70,7 @@ func (cs *StoreImpl) Update(ctx context.Context, url string, replacements map[st
 		return nil, err
 	}
 
-	doc, err := cs.getDocBySlug(ctx, oldSlug)
+	doc, err := cs.GetBySlug(ctx, oldSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -124,10 +124,24 @@ func (cs *StoreImpl) Get(ctx context.Context, url string) (*util.Mf2Document, er
 		return nil, err
 	}
 
-	return cs.getDocBySlug(ctx, slug)
+	return cs.GetBySlug(ctx, slug)
 }
 
-func (cs *StoreImpl) List(ctx context.Context, page int, limit int) ([]util.Mf2Document, error) {
+func (cs *StoreImpl) GetBySlug(ctx context.Context, slug string) (*util.Mf2Document, error) {
+	document, err := cs.queries.GetDocumentBySlug(ctx, content.StringToNullString(slug))
+	if err != nil {
+		return nil, err
+	}
+
+	doc, err := parseRowToDocument(document)
+	if err != nil {
+		return nil, err
+	}
+
+	return doc, nil
+}
+
+func (cs *StoreImpl) List(ctx context.Context, page int, limit int) ([]*util.Mf2Document, error) {
 	_, limit, offset := content.NormalizePagination(cs.pagination.PerPage, page, limit)
 
 	rows, err := cs.queries.ListDocuments(ctx, db.ListDocumentsParams{Limit: int64(limit), Offset: int64(offset)})
@@ -138,7 +152,7 @@ func (cs *StoreImpl) List(ctx context.Context, page int, limit int) ([]util.Mf2D
 	return parseRowsToDocuments(rows), nil
 }
 
-func (cs *StoreImpl) Query(ctx context.Context, page int, limit int, filter content.QueryDocumentsFilter) ([]util.Mf2Document, error) {
+func (cs *StoreImpl) Query(ctx context.Context, page int, limit int, filter content.QueryDocumentsFilter) ([]*util.Mf2Document, error) {
 	_, limit, offset := content.NormalizePagination(cs.pagination.PerPage, page, limit)
 
 	params := content.QueryDocumentsParamsFromFilter(limit, offset, filter)
@@ -149,25 +163,6 @@ func (cs *StoreImpl) Query(ctx context.Context, page int, limit int, filter cont
 	}
 
 	return parseRowsToDocuments(rows), nil
-}
-
-func parseRowsToDocuments(rows []string) []util.Mf2Document {
-	if len(rows) == 0 {
-		return []util.Mf2Document{}
-	}
-
-	docs := make([]util.Mf2Document, 0, len(rows))
-	for _, row := range rows {
-		var doc util.Mf2Document
-		if err := json.Unmarshal([]byte(row), &doc); err != nil {
-			log.Println("warning: failed to unmarshal document json:", err)
-			continue
-		}
-
-		docs = append(docs, doc)
-	}
-
-	return docs
 }
 
 func (cs *StoreImpl) ListCategories(ctx context.Context, page int, limit int, filter string) ([]string, error) {
@@ -198,24 +193,6 @@ func (cs *StoreImpl) ListCategories(ctx context.Context, page int, limit int, fi
 	return categories, nil
 }
 
-func (cs *StoreImpl) getDocBySlug(ctx context.Context, slug string) (*util.Mf2Document, error) {
-	document, err := cs.queries.GetDocumentBySlug(ctx, content.StringToNullString(slug))
-	if err != nil {
-		return nil, err
-	}
-
-	if document == "" {
-		return nil, content.ErrNotFound
-	}
-
-	var doc util.Mf2Document
-	if err := json.Unmarshal([]byte(document), &doc); err != nil {
-		return nil, err
-	}
-
-	return &doc, nil
-}
-
 func (cs *StoreImpl) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
 	exists, err := cs.queries.DocExistsBySlug(ctx, content.StringToNullString(slug))
 	if err != nil {
@@ -223,4 +200,37 @@ func (cs *StoreImpl) ExistsBySlug(ctx context.Context, slug string) (bool, error
 	}
 
 	return exists != 0, nil
+}
+
+func parseRowsToDocuments(rows []string) []*util.Mf2Document {
+	if len(rows) == 0 {
+		return []*util.Mf2Document{}
+	}
+
+	docs := make([]*util.Mf2Document, 0, len(rows))
+	for _, row := range rows {
+		doc, err := parseRowToDocument(row)
+		if err != nil {
+			log.Println("warning: skipping document due to parse error:", err)
+			continue
+		}
+
+		docs = append(docs, doc)
+	}
+
+	return docs
+}
+
+func parseRowToDocument(row string) (*util.Mf2Document, error) {
+	if row == "" {
+		return nil, fmt.Errorf("warning: tried to unmarshal empty document")
+	}
+
+	var doc util.Mf2Document
+	if err := json.Unmarshal([]byte(row), &doc); err != nil {
+		log.Println("warning: failed to unmarshal document json:", err)
+		return nil, err
+	}
+
+	return &doc, nil
 }

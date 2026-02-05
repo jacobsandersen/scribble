@@ -47,7 +47,8 @@ SELECT c.doc FROM scribble_content c
             CAST(? AS INTEGER) = 0
             OR c.created_day_of_year = ?
         )
-        AND c.is_visible = 1
+        AND c.is_visible = 1 -- only show visible documents
+        AND c.is_unlisted = 0 -- except unlisted ones
     ORDER BY c.created_at DESC
     LIMIT ? OFFSET ?;
 

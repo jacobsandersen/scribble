@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/indieinfra/scribble/server/auth"
 	"github.com/indieinfra/scribble/server/resp"
@@ -73,21 +72,13 @@ func Update(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, dat
 	}
 
 	if !strings.EqualFold(slug, oldSlug) {
-		timeCreatedStr, ok := doc.GetFirstStringProp("created_at")
-		if !ok {
-			resp.LogAndWriteError(w, r, "get created_at after slug change", fmt.Errorf("missing created_at property"))
-			resp.WriteNoContent(w) // We know the url changed, but can't generate the new one without created_at
-			return
-		}
-
-		timeCreated, err := time.ParseInLocation(time.RFC3339, timeCreatedStr, time.Local)
+		newUrl, err := st.ContentPathPattern.ReplaceSlugParam(url, slug)
 		if err != nil {
-			resp.LogAndWriteError(w, r, "parse created_at after slug change", err)
-			resp.WriteNoContent(w) // We know the url changed, but can't generate the new one without (valid!) created_at
+			resp.LogAndWriteError(w, r, "generate new URL after slug change", err)
+			resp.WriteNoContent(w) // We know the url changed, but can't generate the new one
 			return
 		}
 
-		newUrl, _ := st.ContentPathPattern.GenerateContent(timeCreated, slug)
 		resp.WriteCreated(w, newUrl)
 		return
 	}

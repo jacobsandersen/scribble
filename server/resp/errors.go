@@ -1,13 +1,13 @@
 package resp
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/indieinfra/scribble/server/util"
-	"github.com/indieinfra/scribble/storage/content"
 )
 
 // LogAndWriteError logs an error with request context and maps known conditions to client responses.
@@ -19,7 +19,7 @@ func LogAndWriteError(w http.ResponseWriter, r *http.Request, op string, err err
 	rl.Errorf("%s failed: %v", op, err)
 
 	switch {
-	case errors.Is(err, content.ErrNotFound):
+	case errors.Is(err, sql.ErrNoRows):
 		WriteNotFound(w, "not found")
 	default:
 		WriteInternalServerError(w, fmt.Sprintf("%s failed", op))
