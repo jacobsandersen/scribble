@@ -53,6 +53,7 @@ func runServer(st *state.ScribbleState) (*http.Server, chan error) {
 	mux.Handle("POST /micropub/media", middleware.ValidateTokenMiddleware(st.Cfg, micropubupload.HandleMediaUpload(st)))
 	mux.Handle("GET /query/find", query.HandleFind(st))
 	mux.Handle("GET /query/list", query.HandleList(st))
+	mux.Handle("GET /query/list-categories", query.HandleListCategories(st))
 
 	srv := &http.Server{
 		Addr:    st.Cfg.Server.Binding.AddressPort(),
