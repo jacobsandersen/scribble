@@ -72,6 +72,17 @@ func GetFirstOrNil(p *QueryParams, key string) *string {
 	return &first
 }
 
+// GetFirstOrDefault gets the first value for a QueryParam from the given QueryParams
+// If the key does not map a param, or there are no values, the provided default value is returned
+func GetFirstOrDefault(p *QueryParams, key string, def string) string {
+	maybe := GetFirstOrNil(p, key)
+	if maybe != nil {
+		return *maybe
+	}
+
+	return def
+}
+
 // GetIntOrNil finds a single QueryParam from the QueryParams and attempts to parse its first value as an int-like type
 // If successful, a pointer to that value is returned. Otherwise, nil is returned.
 func GetIntOrNil[T intType](p *QueryParams, key string) *T {
