@@ -14,6 +14,7 @@ func HandleList(st *state.ScribbleState) http.HandlerFunc {
 		params := body.ReadQueryParams(r)
 
 		filter := content.QueryDocumentsFilter{
+			Type:             body.GetFirstOrNil(&params, "type"),
 			Slug:             body.GetFirstOrNil(&params, "slug"),
 			Category:         body.GetFirstOrNil(&params, "category"),
 			CreatedYear:      body.GetIntOrNil[int64](&params, "year"),

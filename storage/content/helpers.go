@@ -125,6 +125,7 @@ func NormalizePagination(perPage, page, limit int) (int, int, int) {
 
 func QueryDocumentsParamsFromFilter(limit, offset int, filter QueryDocumentsFilter) db.QueryDocumentsParams {
 	var (
+		typ              sql.NullString
 		slug             sql.NullString
 		category         string
 		createdYear      sql.NullInt64
@@ -134,6 +135,7 @@ func QueryDocumentsParamsFromFilter(limit, offset int, filter QueryDocumentsFilt
 		createdWeek      sql.NullInt64
 		createdDayOfYear sql.NullInt64
 
+		applyType             int64
 		applySlug             int64
 		applyCategory         int64
 		applyCreatedYear      int64
@@ -144,6 +146,10 @@ func QueryDocumentsParamsFromFilter(limit, offset int, filter QueryDocumentsFilt
 		applyCreatedDayOfYear int64
 	)
 
+	if filter.Type != nil {
+		applyType = 1
+		typ = sql.NullString{String: *filter.Type, Valid: true}
+	}
 	if filter.Slug != nil {
 		applySlug = 1
 		slug = sql.NullString{String: *filter.Slug, Valid: true}
@@ -178,21 +184,23 @@ func QueryDocumentsParamsFromFilter(limit, offset int, filter QueryDocumentsFilt
 	}
 
 	return db.QueryDocumentsParams{
-		Column1:          applySlug,
+		Column1:          applyType,
+		Type:             typ,
+		Column3:          applySlug,
 		Slug:             slug,
-		Column3:          applyCategory,
+		Column5:          applyCategory,
 		Category:         category,
-		Column5:          applyCreatedYear,
+		Column7:          applyCreatedYear,
 		CreatedYear:      createdYear,
-		Column7:          applyCreatedMonth,
+		Column9:          applyCreatedMonth,
 		CreatedMonth:     createdMonth,
-		Column9:          applyCreatedDay,
+		Column11:         applyCreatedDay,
 		CreatedDay:       createdDay,
-		Column11:         applyCreatedWeekday,
+		Column13:         applyCreatedWeekday,
 		CreatedWeekday:   createdWeekday,
-		Column13:         applyCreatedWeek,
+		Column15:         applyCreatedWeek,
 		CreatedWeek:      createdWeek,
-		Column15:         applyCreatedDayOfYear,
+		Column17:         applyCreatedDayOfYear,
 		CreatedDayOfYear: createdDayOfYear,
 		Offset:           int64(offset),
 		Limit:            int64(limit),

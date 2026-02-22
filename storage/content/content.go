@@ -7,6 +7,7 @@ import (
 )
 
 type QueryDocumentsFilter struct {
+	Type             *string
 	Slug             *string
 	Category         *string
 	CreatedYear      *int64

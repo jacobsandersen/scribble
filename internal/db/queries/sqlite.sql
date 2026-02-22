@@ -12,8 +12,12 @@ SELECT doc FROM scribble_content
 SELECT c.doc FROM scribble_content c
     WHERE (
         CAST(? AS INTEGER) = 0
-        OR c.slug = ?
+        OR c.type = ?
     )
+        AND (
+            CAST(? AS INTEGER) = 0
+            OR c.slug = ?
+        )
         AND (
             CAST(? AS INTEGER) = 0
             OR EXISTS (
