@@ -6,10 +6,10 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/indieinfra/scribble/config"
-	"github.com/indieinfra/scribble/server/auth"
-	"github.com/indieinfra/scribble/server/resp"
-	"github.com/indieinfra/scribble/server/util"
+	"github.com/jacobsandersen/scribble/config"
+	"github.com/jacobsandersen/scribble/server/auth"
+	"github.com/jacobsandersen/scribble/server/resp"
+	"github.com/jacobsandersen/scribble/server/util"
 )
 
 type ParsedBody struct {

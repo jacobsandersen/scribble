@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/indieinfra/scribble/server/util"
+	"github.com/jacobsandersen/scribble/server/util"
 )
 
 // LogAndWriteError logs an error with request context and maps known conditions to client responses.

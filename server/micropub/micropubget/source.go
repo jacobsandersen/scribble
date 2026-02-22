@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/indieinfra/scribble/server/body"
-	"github.com/indieinfra/scribble/server/resp"
-	"github.com/indieinfra/scribble/server/state"
-	"github.com/indieinfra/scribble/server/util"
+	"github.com/jacobsandersen/scribble/server/body"
+	"github.com/jacobsandersen/scribble/server/resp"
+	"github.com/jacobsandersen/scribble/server/state"
+	"github.com/jacobsandersen/scribble/server/util"
 )
 
 func HandleSource(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, p body.QueryParams) {

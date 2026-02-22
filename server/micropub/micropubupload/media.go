@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/indieinfra/scribble/server/auth"
-	"github.com/indieinfra/scribble/server/middleware"
-	"github.com/indieinfra/scribble/server/resp"
-	"github.com/indieinfra/scribble/server/state"
-	"github.com/indieinfra/scribble/server/util"
+	"github.com/jacobsandersen/scribble/server/auth"
+	"github.com/jacobsandersen/scribble/server/middleware"
+	"github.com/jacobsandersen/scribble/server/resp"
+	"github.com/jacobsandersen/scribble/server/state"
+	"github.com/jacobsandersen/scribble/server/util"
 )
 
 func HandleMediaUpload(st *state.ScribbleState) http.HandlerFunc {

@@ -3,9 +3,9 @@ package micropubget
 import (
 	"net/http"
 
-	"github.com/indieinfra/scribble/server/body"
-	"github.com/indieinfra/scribble/server/resp"
-	"github.com/indieinfra/scribble/server/state"
+	"github.com/jacobsandersen/scribble/server/body"
+	"github.com/jacobsandersen/scribble/server/resp"
+	"github.com/jacobsandersen/scribble/server/state"
 )
 
 func HandleCategory(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, p body.QueryParams) {

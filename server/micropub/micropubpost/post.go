@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/indieinfra/scribble/server/auth"
-	"github.com/indieinfra/scribble/server/micropub/micropubcommon"
-	"github.com/indieinfra/scribble/server/middleware"
-	"github.com/indieinfra/scribble/server/resp"
-	"github.com/indieinfra/scribble/server/state"
+	"github.com/jacobsandersen/scribble/server/auth"
+	"github.com/jacobsandersen/scribble/server/micropub/micropubcommon"
+	"github.com/jacobsandersen/scribble/server/middleware"
+	"github.com/jacobsandersen/scribble/server/resp"
+	"github.com/jacobsandersen/scribble/server/state"
 )
 
 func DispatchPost(st *state.ScribbleState) http.HandlerFunc {

@@ -11,11 +11,11 @@ import (
 	// Import the D1 driver - its init function registers the driver with database/sql
 	_ "github.com/synehq/d1_go_sql"
 
-	"github.com/indieinfra/scribble/config"
-	"github.com/indieinfra/scribble/internal/db"
-	"github.com/indieinfra/scribble/internal/db/schema"
-	"github.com/indieinfra/scribble/server/util"
-	"github.com/indieinfra/scribble/storage/content"
+	"github.com/jacobsandersen/scribble/config"
+	"github.com/jacobsandersen/scribble/internal/db"
+	"github.com/jacobsandersen/scribble/internal/db/schema"
+	"github.com/jacobsandersen/scribble/server/util"
+	"github.com/jacobsandersen/scribble/storage/content"
 )
 
 type StoreImpl struct {

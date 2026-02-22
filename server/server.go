@@ -11,16 +11,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/indieinfra/scribble/config"
-	"github.com/indieinfra/scribble/server/micropub/micropubget"
-	"github.com/indieinfra/scribble/server/micropub/micropubpost"
-	"github.com/indieinfra/scribble/server/micropub/micropubupload"
-	"github.com/indieinfra/scribble/server/middleware"
-	"github.com/indieinfra/scribble/server/query"
-	"github.com/indieinfra/scribble/server/state"
-	"github.com/indieinfra/scribble/storage/content/factory"
-	mediafactory "github.com/indieinfra/scribble/storage/media/factory"
-	"github.com/indieinfra/scribble/storage/util"
+	"github.com/jacobsandersen/scribble/config"
+	"github.com/jacobsandersen/scribble/server/micropub/micropubget"
+	"github.com/jacobsandersen/scribble/server/micropub/micropubpost"
+	"github.com/jacobsandersen/scribble/server/micropub/micropubupload"
+	"github.com/jacobsandersen/scribble/server/middleware"
+	"github.com/jacobsandersen/scribble/server/query"
+	"github.com/jacobsandersen/scribble/server/state"
+	"github.com/jacobsandersen/scribble/storage/content/factory"
+	mediafactory "github.com/jacobsandersen/scribble/storage/media/factory"
+	"github.com/jacobsandersen/scribble/storage/util"
 )
 
 func StartServer(cfg *config.Config) error {

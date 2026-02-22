@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/indieinfra/scribble/config"
-	"github.com/indieinfra/scribble/storage/media"
-	"github.com/indieinfra/scribble/storage/media/s3"
+	"github.com/jacobsandersen/scribble/config"
+	"github.com/jacobsandersen/scribble/storage/media"
+	"github.com/jacobsandersen/scribble/storage/media/s3"
 )
 
 // Factory builds a media store for the provided media config.

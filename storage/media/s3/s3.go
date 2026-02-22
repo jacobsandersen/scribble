@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/indieinfra/scribble/config"
-	"github.com/indieinfra/scribble/server/util"
+	"github.com/jacobsandersen/scribble/config"
+	"github.com/jacobsandersen/scribble/server/util"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )

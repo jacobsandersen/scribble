@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/indieinfra/scribble/config"
-	"github.com/indieinfra/scribble/storage/content"
-	"github.com/indieinfra/scribble/storage/content/d1"
+	"github.com/jacobsandersen/scribble/config"
+	"github.com/jacobsandersen/scribble/storage/content"
+	"github.com/jacobsandersen/scribble/storage/content/d1"
 )
 
 // Factory builds a content store for the provided content config.
