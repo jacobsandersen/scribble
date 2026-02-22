@@ -3,7 +3,7 @@ package content
 import (
 	"context"
 
-	"github.com/indieinfra/scribble/server/util"
+	"github.com/jacobsandersen/scribble/server/util"
 )
 
 type QueryDocumentsFilter struct {

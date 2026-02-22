@@ -3,9 +3,9 @@ package query
 import (
 	"net/http"
 
-	"github.com/indieinfra/scribble/server/body"
-	"github.com/indieinfra/scribble/server/resp"
-	"github.com/indieinfra/scribble/server/state"
+	"github.com/jacobsandersen/scribble/server/body"
+	"github.com/jacobsandersen/scribble/server/resp"
+	"github.com/jacobsandersen/scribble/server/state"
 )
 
 func HandleFind(st *state.ScribbleState) http.HandlerFunc {

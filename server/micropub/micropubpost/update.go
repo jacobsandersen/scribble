@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/indieinfra/scribble/server/auth"
-	"github.com/indieinfra/scribble/server/resp"
-	"github.com/indieinfra/scribble/server/state"
-	"github.com/indieinfra/scribble/server/util"
-	"github.com/indieinfra/scribble/storage/content"
+	"github.com/jacobsandersen/scribble/server/auth"
+	"github.com/jacobsandersen/scribble/server/resp"
+	"github.com/jacobsandersen/scribble/server/state"
+	"github.com/jacobsandersen/scribble/server/util"
+	"github.com/jacobsandersen/scribble/storage/content"
 )
 
 func Update(st *state.ScribbleState, w http.ResponseWriter, r *http.Request, data map[string]any) {

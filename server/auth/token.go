@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/indieinfra/scribble/config"
+	"github.com/jacobsandersen/scribble/config"
 )
 
 type tokenKeyType struct{}

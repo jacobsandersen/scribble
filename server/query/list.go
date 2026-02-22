@@ -3,10 +3,10 @@ package query
 import (
 	"net/http"
 
-	"github.com/indieinfra/scribble/server/body"
-	"github.com/indieinfra/scribble/server/resp"
-	"github.com/indieinfra/scribble/server/state"
-	"github.com/indieinfra/scribble/storage/content"
+	"github.com/jacobsandersen/scribble/server/body"
+	"github.com/jacobsandersen/scribble/server/resp"
+	"github.com/jacobsandersen/scribble/server/state"
+	"github.com/jacobsandersen/scribble/storage/content"
 )
 
 func HandleList(st *state.ScribbleState) http.HandlerFunc {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	serverutil "github.com/indieinfra/scribble/server/util"
+	serverutil "github.com/jacobsandersen/scribble/server/util"
 )
 
 const testNewSlug = "my-uncool-post"

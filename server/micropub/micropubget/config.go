@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/indieinfra/scribble/server/body"
-	"github.com/indieinfra/scribble/server/resp"
-	"github.com/indieinfra/scribble/server/state"
+	"github.com/jacobsandersen/scribble/server/body"
+	"github.com/jacobsandersen/scribble/server/resp"
+	"github.com/jacobsandersen/scribble/server/state"
 )
 
 type Service struct {

@@ -8,8 +8,8 @@ import (
 	"reflect"
 
 	"github.com/google/uuid"
-	"github.com/indieinfra/scribble/internal/db"
-	"github.com/indieinfra/scribble/server/util"
+	"github.com/jacobsandersen/scribble/internal/db"
+	"github.com/jacobsandersen/scribble/server/util"
 )
 
 // DeleteValues removes elements present in toRemove from values using deep equality.

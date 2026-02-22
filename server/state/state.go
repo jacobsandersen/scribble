@@ -1,10 +1,10 @@
 package state
 
 import (
-	"github.com/indieinfra/scribble/config"
-	"github.com/indieinfra/scribble/storage/content"
-	"github.com/indieinfra/scribble/storage/media"
-	"github.com/indieinfra/scribble/storage/util"
+	"github.com/jacobsandersen/scribble/config"
+	"github.com/jacobsandersen/scribble/storage/content"
+	"github.com/jacobsandersen/scribble/storage/media"
+	"github.com/jacobsandersen/scribble/storage/util"
 )
 
 type ScribbleState struct {

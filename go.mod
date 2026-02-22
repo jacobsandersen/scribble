@@ -1,4 +1,4 @@
-module github.com/indieinfra/scribble
+module github.com/jacobsandersen/scribble
 
 go 1.25.5
 

@@ -4,8 +4,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/indieinfra/scribble/config"
-	"github.com/indieinfra/scribble/server"
+	"github.com/jacobsandersen/scribble/config"
+	"github.com/jacobsandersen/scribble/server"
 )
 
 func main() {

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/indieinfra/scribble/server/util"
+	"github.com/jacobsandersen/scribble/server/util"
 )
 
 type PathPattern struct {
