@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS scribble_content (
     id INTEGER PRIMARY KEY, 
     doc TEXT NOT NULL,
+    type TEXT GENERATED ALWAYS AS (json_extract(doc, '$.type[0]')) STORED,
     slug TEXT GENERATED ALWAYS AS (json_extract(doc, '$.properties.slug[0]')) STORED,
     deleted INTEGER GENERATED ALWAYS AS (CASE WHEN json_extract(doc, '$.properties.deleted[0]') = 1 THEN 1 ELSE 0 END) STORED,
     status TEXT GENERATED ALWAYS AS (json_extract(doc, '$.properties."post-status"[0]')) STORED,
